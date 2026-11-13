@@ -1,0 +1,45 @@
+# ============================================================
+# 换行符与文件属性规范
+#
+# 关键原因：Windows 仓库用 CRLF、Linux 仓库用 LF。
+# 若 shell 脚本以 CRLF 存入 git，在 Linux 上会因 "#!/bin/bash\r"
+# 而无法执行 —— SignPath 的 CI 构建系统跑在 Linux 上，
+# 因此 .sh / .nsi 必须强制 LF。
+# ============================================================
+
+# 默认：文本文件按 LF 检出（Windows 侧由 core.autocrlf 转换，不入库）
+* text=auto eol=lf
+
+# 必须严格 LF —— shell 脚本与 NSIS 脚本
+*.sh    text eol=lf
+*.nsi   text eol=lf
+*.nsh   text eol=lf
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+
+# 源码
+*.py    text eol=lf
+*.rs    text eol=lf
+*.toml  text eol=lf
+*.lock  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.md    text eol=lf
+*.json  text eol=lf
+*.desktop text eol=lf
+
+# 二进制
+*.exe   binary
+*.deb   binary
+*.ico   binary
+*.png   binary
+*.jpg   binary
+*.pdf   binary
+*.ttf   binary
+*.otf   binary
+*.ttc   binary
+*.so    binary
+*.dll   binary
+*.pyd   binary
+*.bc    binary
+*.bin   binary
