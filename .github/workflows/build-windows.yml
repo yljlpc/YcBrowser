@@ -11,7 +11,8 @@ name: Build Windows
 #   4. 产物元数据必须正确：产品名与项目名一致，版本号在每次构建中一致
 #   5. 每次发布都需要人工批准签名（approver 角色）
 #
-# 签名步骤在推送 v* tag 时触发；未配置 SignPath Secret 时自动跳过。
+# 签名开关：仓库变量 vars.SIGNPATH_ENABLED = 'true' 且 4 个 secrets 齐备时启用。
+# 未启用时照常构建并发布（未签名），保证 SignPath 申请所需的「已发布」状态。
 # ============================================================================
 on:
   push:
@@ -22,10 +23,24 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: build-windows-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: Build Windows installer
     runs-on: windows-2022
+
+    # secrets 不能直接用于 if 条件，因此把签名配置提升到 job 级 env：
+    # step 的 if 可安全引用 env.*，且 secret 值会被 GitHub 自动掩码。
+    env:
+      SIGNPATH_ENABLED: ${{ vars.SIGNPATH_ENABLED }}
+      SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+      SIGNPATH_ORGANIZATION_ID: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+      SIGNPATH_PROJECT_SLUG: ${{ secrets.SIGNPATH_PROJECT_SLUG }}
+      SIGNPATH_SIGNING_POLICY_SLUG: ${{ secrets.SIGNPATH_SIGNING_POLICY_SLUG }}
+      SIGNPATH_ARTIFACT_CONFIGURATION_SLUG: ${{ secrets.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
 
     steps:
       - name: Checkout
@@ -109,59 +124,87 @@ jobs:
       # ------------------------------------------------------------------
       # SignPath 签名步骤
       #
-      # 需要仓库配置以下 Secrets（见 docs/04-windows-code-signing.md）：
-      #   SIGNPATH_API_TOKEN          — SignPath API Token（Submitter 权限）
-      #   SIGNPATH_ORGANIZATION_ID    — SignPath 组织 ID
-      #   SIGNPATH_PROJECT_SLUG       — 项目 slug
-      #   SIGNPATH_SIGNING_POLICY_SLUG — 签名策略（通常为 release-signing）
+      # 需要仓库配置：
+      #   变量 vars.SIGNPATH_ENABLED            = 'true'（签名总开关）
+      #   Secrets SIGNPATH_API_TOKEN          — SignPath API Token（Submitter 权限）
+      #   Secrets SIGNPATH_ORGANIZATION_ID    — SignPath 组织 ID
+      #   Secrets SIGNPATH_PROJECT_SLUG       — 项目 slug
+      #   Secrets SIGNPATH_SIGNING_POLICY_SLUG — 签名策略（通常为 release-signing）
+      #   Secrets SIGNPATH_ARTIFACT_CONFIGURATION_SLUG — 产物配置（可选）
       #
-      # 未配置这些 Secret 时本步骤自动跳过，不影响未签名构建。
+      # 未配置时本步骤自动跳过，不影响未签名构建与发布。
+      #
+      # 注意 action 名称必须是 SignPath/github-action-submit-signing-request，
+      # 旧的 signpath/signpath-action 仓库并不存在，会导致整个 workflow
+      # 在「准备 action」阶段就失败（即使该步骤被 if 跳过）。
       # ------------------------------------------------------------------
       - name: Sign with SignPath
-        if: startsWith(github.ref, 'refs/tags/v') && env.SIGNPATH_API_TOKEN != ''
-        env:
-          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
-          SIGNPATH_ORGANIZATION_ID: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
-          SIGNPATH_PROJECT_SLUG: ${{ secrets.SIGNPATH_PROJECT_SLUG }}
-          SIGNPATH_SIGNING_POLICY_SLUG: ${{ secrets.SIGNPATH_SIGNING_POLICY_SLUG }}
-        uses: signpath/signpath-action@v1
+        id: signpath
+        if: startsWith(github.ref, 'refs/tags/v') && env.SIGNPATH_ENABLED == 'true' && env.SIGNPATH_API_TOKEN != ''
+        uses: SignPath/github-action-submit-signing-request@v3
         with:
           organization-id: ${{ env.SIGNPATH_ORGANIZATION_ID }}
           project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
           signing-policy-slug: ${{ env.SIGNPATH_SIGNING_POLICY_SLUG }}
-          artifact-configuration-slug: windows-installer
+          artifact-configuration-slug: ${{ env.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
           api-token: ${{ env.SIGNPATH_API_TOKEN }}
-          wait-for-completion: 'true'
           github-artifact-id: ${{ steps.artifact-id.outputs.artifact-id }}
+          # 人工批准可能耗时较久，放宽等待上限
+          wait-for-completion: 'true'
+          wait-for-completion-timeout-in-seconds: '3600'
+          output-artifact-directory: signed-artifact
 
       - name: Verify signature
-        if: startsWith(github.ref, 'refs/tags/v') && env.SIGNPATH_API_TOKEN != ''
+        if: steps.signpath.outputs.signing-request-id != ''
         shell: pwsh
         run: |
           $version = (Select-String -Path src/version.py -Pattern '^VERSION\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
-          $setup = "dist-artifact/YcBrowser-$version-setup.exe"
-          $signtool = "${env:ProgramFiles(x86)}\Windows Kits\10\bin\10.0.22621.0\x64\signtool.exe"
-          if (-not (Test-Path $signtool)) {
-            $signtool = (Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
-                         Sort-Object FullName -Descending | Select-Object -First 1).FullName
-          }
-          & $signtool verify /pa /v $setup
+          $setup = "signed-artifact/YcBrowser-$version-setup.exe"
+          if (-not (Test-Path $setup)) { throw "未找到签名后的安装包: $setup" }
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
+                      Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $signtool) { throw "未找到 signtool.exe" }
+          & $signtool.FullName verify /pa /v $setup
           if ($LASTEXITCODE -ne 0) { throw "签名验证失败" }
+          # 记录签名者，便于审计
+          (Get-AuthenticodeSignature $setup).SignerCertificate | Format-List Subject,Issuer,NotAfter
 
       - name: Upload signed installer
-        if: startsWith(github.ref, 'refs/tags/v') && env.SIGNPATH_API_TOKEN != ''
+        if: steps.signpath.outputs.signing-request-id != ''
         uses: actions/upload-artifact@v4
         with:
           name: windows-installer-signed
-          path: dist-artifact/
+          path: signed-artifact/
           if-no-files-found: error
 
+      # ------------------------------------------------------------------
+      # 发布 Release
+      #
+      # 未接入 SignPath 时发布未签名版本（满足 SignPath 申请所需的「已发布」状态）；
+      # 已签名时优先发布签名产物。
+      # ------------------------------------------------------------------
       - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/v') && env.SIGNPATH_API_TOKEN != ''
+        if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $version = (Select-String -Path src/version.py -Pattern '^VERSION\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
+          $name = "YcBrowser-$version-setup.exe"
+          $signed = "signed-artifact/$name"
+          $unsigned = "dist-artifact/$name"
+          if (Test-Path $signed) {
+            $file = $signed
+            $note = "由 GitHub Actions 自动构建，并经 SignPath Foundation 免费代码签名。"
+          } else {
+            $file = $unsigned
+            $note = "由 GitHub Actions 自动构建（本次发布未签名）。"
+          }
+          # 附带 SHA-256 校验和，便于用户核验下载完整性
+          $hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
+          "$($hash)  $($name)" | Out-File -FilePath "$name.sha256" -Encoding utf8
           gh release create "${{ github.ref_name }}" `
             --title "Yc浏览器 $version" `
-            --notes "由 GitHub Actions 自动构建并经 SignPath Foundation 签名。" `
-            "dist-artifact/YcBrowser-$version-setup.exe"
+            --notes $note `
+            "$file" "$name.sha256"
+          Write-Output "RELEASE_URL=https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
