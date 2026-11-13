@@ -53,6 +53,8 @@ def main():
     ap.add_argument("--owner", default=None, help="fork 所属账号，默认取当前 token 所属用户")
     ap.add_argument("--token", default=os.environ.get("GITHUB_TOKEN"))
     ap.add_argument("--dry-run", action="store_true", help="只打印将要提交的内容")
+    ap.add_argument("--no-pr", action="store_true", help="只更新清单文件，不创建 PR")
+    ap.add_argument("--branch", default=None, help="指定分支名，默认 manifests/y/<包>/<包>/<版本>")
     args = ap.parse_args()
 
     if not args.token:
@@ -86,7 +88,7 @@ def main():
         api("GET", f"/repos/{fork}", args.token)
 
     # 2) 创建版本分支（winget 社区惯例：分支名与清单目录一致）
-    branch = rel_base
+    branch = args.branch or rel_base
     try:
         api("GET", f"/repos/{fork}/branches/{branch}", args.token)
         print(f"分支已存在：{branch}")
@@ -96,16 +98,28 @@ def main():
             {"ref": f"refs/heads/{branch}", "sha": head})
         print(f"已创建分支：{branch}")
 
-    # 3) 写入文件
+    # 3) 写入文件（已存在则先取 blob sha，走更新流程）
     for f in files:
         path = f"{rel_base}/{f}"
         content = open(os.path.join(base, f), "rb").read()
-        api("PUT", f"/repos/{fork}/contents/{path}", args.token, {
+        payload = {
             "message": f"Add new manifest: {IDENTIFIER} ({args.version})",
             "content": base64.b64encode(content).decode(),
             "branch": branch,
-        })
+        }
+        try:
+            existing = api("GET", f"/repos/{fork}/contents/{path}?ref={branch}", args.token)
+            if isinstance(existing, dict) and existing.get("sha"):
+                payload["sha"] = existing["sha"]
+                payload["message"] = f"Update manifest: {IDENTIFIER} ({args.version})"
+        except SystemExit:
+            pass
+        api("PUT", f"/repos/{fork}/contents/{path}", args.token, payload)
         print(f"  已写入 {path}")
+
+    if args.no_pr:
+        print("\n--no-pr：仅更新文件，未创建 PR。")
+        return
 
     # 4) 发起 PR
     title = f"New package: {IDENTIFIER} ({args.version})"
