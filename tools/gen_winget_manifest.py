@@ -59,20 +59,39 @@ Windows 安装包完全自带运行时：Qt 6 全部运行时（平台插件、W
 """
 
 DESC_EN = """\
-YcBrowser is an open-source multi-engine desktop browser built on a Rust native core and PyQt6 (Qt 6 WebEngine).
+YcBrowser is an open-source multi-engine desktop browser built on a Rust native core with a PyQt6 (Qt 6 WebEngine) shell.
 
-Highlights:
+• Multi-engine compatibility — Blink (Chromium content + V8) by default, plus a WebKit user-agent and Trident compatibility mode that negotiates document mode via X-UA-Compatible and injects legacy DOM shims. Every tab has its own QWebEngineProfile, so engine and user agent can be isolated per tab.
 
-• Multi-engine compatibility — Blink (Chromium content + V8) is the default engine; WebKit user-agent and Trident compatibility mode are also available, the latter negotiating document mode via X-UA-Compatible and injecting legacy DOM shims. Every tab owns an independent QWebEngineProfile, so engine and user agent can be isolated per tab.
+• Live English-to-Chinese translation — visible page text is extracted and translated sentence by sentence, with terminology unification and colloquial rewriting applied before the result is written back into the DOM; one click restores the original. Backends: MyMemory (free), Google, LibreTranslate or a custom endpoint.
 
-• Live English-to-Chinese translation — visible page text is extracted and translated sentence by sentence, then terminology unification and colloquial rewriting are applied before writing the result back into the DOM; the original can be restored with one click. Backends: MyMemory (free), Google, LibreTranslate, or a custom endpoint.
+• High-speed download engine — up to 32 parallel connections per file, with dynamic rebalancing, throttling, resume support and automatic archiving by file type.
 
-• High-speed download engine — up to 32 parallel connections per file with dynamic rebalancing, throttling and resume support, plus automatic archiving into video, music, program, archive and document folders.
+• Interface — multi-tab browsing, history, bookmarks, find-in-page, download manager, developer tools, resolution-aware scaling, incognito windows, printing and PDF export.
 
-• Interface — multi-tab browsing, separate address bar, history, bookmarks, find-in-page, download manager, developer tools, resolution-aware scaling, incognito windows, printing and PDF export.
-
-The Windows installer is fully self-contained: it bundles the complete Qt 6 runtime (platform plugins, WebEngine renderer process and resources, ICU data, V8 snapshots), a Python runtime, the VC++ runtime, Chinese fonts and the Rust native core, so it runs on a machine with no preinstalled software or environment.
+The Windows installer is fully self-contained: it bundles the complete Qt 6 runtime, a Python runtime, the VC++ runtime, Chinese fonts and the Rust native core, so it runs on a machine with no preinstalled software or environment.
 """
+
+
+def indent_block(text, n=2):
+    """给多行文本整体加缩进，使其能放进 YAML 块标量（|-）内。"""
+    pad = " " * n
+    lines = text.rstrip("\n").split("\n")
+    return "\n".join(pad + ln if ln.strip() else "" for ln in lines)
+
+
+def fit(text, limit=1024, label="Description"):
+    """winget 的 Description 上限为 1024 字符，超出时按句号边界裁剪。"""
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    dot = cut.rfind(". ")
+    if dot > limit * 0.5:
+        cut = cut[:dot + 1]
+    else:
+        cut = cut[:limit].rstrip() + "..."
+    print(f"⚠️  {label} 超长（{len(text)} > {limit}），已裁剪到 {len(cut)} 字符")
+    return cut
 
 
 def api_get(url, token=None):
@@ -85,7 +104,12 @@ def api_get(url, token=None):
 
 def release_digest(repo, version, token=None):
     """取 Release 资产的 SHA-256（GitHub 会对上传资产计算 digest）。"""
-    data = api_get(f"https://api.github.com/repos/{repo}/releases/tags/v{version}", token)
+    try:
+        data = api_get(f"https://api.github.com/repos/{repo}/releases/tags/v{version}", token)
+    except Exception as exc:  # Release 尚未发布或无访问权限
+        raise SystemExit(
+            f"无法读取 {repo} 的 v{version} Release：{exc}\n"
+            f"请先完成该版本的发布，再用 --sha256 手动指定校验和。")
     name = f"YcBrowser-{version}-setup.exe"
     for asset in data.get("assets", []):
         if asset["name"] == name:
@@ -111,6 +135,8 @@ def main():
     ap.add_argument("--repo", default=REPO, help="GitHub 仓库 owner/name")
     ap.add_argument("--out", default=None, help="输出根目录，默认 <仓库>/winget")
     ap.add_argument("--token", default=os.environ.get("GITHUB_TOKEN"), help="GitHub token")
+    ap.add_argument("--sha256", default=None,
+                    help="手动指定安装包 SHA-256（Release 尚未发布或资产无 digest 时使用）")
     args = ap.parse_args()
 
     v = args.version
@@ -119,7 +145,9 @@ def main():
     base = os.path.join(out, "manifests", "y", PACKAGE, PACKAGE, v)
     os.makedirs(base, exist_ok=True)
 
-    sha = release_digest(args.repo, v, args.token)
+    sha = args.sha256.upper() if args.sha256 else release_digest(args.repo, v, args.token)
+    if len(sha) != 64 or not all(c in "0123456789ABCDEF" for c in sha):
+        raise SystemExit(f"SHA-256 格式不正确：{sha}")
     url = DOWNLOAD_URL.format(repo=args.repo, version=v)
     repo_url = f"https://github.com/{args.repo}"
     release = RELEASE_URL.format(repo=args.repo, version=v)
@@ -178,7 +206,8 @@ LicenseUrl: {repo_url}/blob/main/LICENSE
 Copyright: © 2026 yljlpc
 ShortDescription: 基于 Rust 核心与 Qt 6 的多引擎桌面浏览器，支持实时翻译与高速下载。
 Description: |-
-{DESC_ZH}Tags:
+{indent_block(fit(DESC_ZH))}
+Tags:
 - browser
 - translation
 - downloader
@@ -206,7 +235,8 @@ LicenseUrl: {repo_url}/blob/main/LICENSE
 Copyright: © 2026 yljlpc
 ShortDescription: A multi-engine desktop browser built on a Rust core and Qt 6, with live translation and a fast downloader.
 Description: |-
-{DESC_EN}Tags:
+{indent_block(fit(DESC_EN))}
+Tags:
 - browser
 - translation
 - downloader

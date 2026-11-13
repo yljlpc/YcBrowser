@@ -199,6 +199,17 @@ QT_QPA_PLATFORM=offscreen python tools/test_browser.py
 
 ---
 
+## 参与贡献
+
+- [CONTRIBUTING.md](CONTRIBUTING.md) —— 构建、测试与提交 PR 的完整说明
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) —— 行为准则
+- [SECURITY.md](SECURITY.md) —— 安全漏洞私密上报流程
+- [requirements.txt](requirements.txt) —— Python 依赖
+
+> `main` 分支受保护：需通过 PR 且至少一位评审者批准后方可合并。
+> 构建脚本与 CI 配置同样属于受评审的源码 —— 这是 SignPath Foundation
+> 「二进制必须可追溯到受评审源码」要求的直接落实。
+
 ## 第三方组件
 
 本项目移植了 [SwiftDL](https://github.com/harshsinghsv/swiftdl)（MIT）的下载引擎

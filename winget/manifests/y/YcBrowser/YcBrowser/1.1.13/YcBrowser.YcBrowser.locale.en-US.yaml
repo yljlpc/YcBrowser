@@ -14,19 +14,11 @@ LicenseUrl: https://github.com/yljlpc/YcBrowser/blob/main/LICENSE
 Copyright: © 2026 yljlpc
 ShortDescription: A multi-engine desktop browser built on a Rust core and Qt 6, with live translation and a fast downloader.
 Description: |-
-YcBrowser is an open-source multi-engine desktop browser built on a Rust native core and PyQt6 (Qt 6 WebEngine).
+  YcBrowser is an open-source multi-engine desktop browser built on a Rust native core with a PyQt6 (Qt 6 WebEngine) shell.
 
-Highlights:
+  • Multi-engine compatibility — Blink (Chromium content + V8) by default, plus a WebKit user-agent and Trident compatibility mode that negotiates document mode via X-UA-Compatible and injects legacy DOM shims. Every tab has its own QWebEngineProfile, so engine and user agent can be isolated per tab.
 
-• Multi-engine compatibility — Blink (Chromium content + V8) is the default engine; WebKit user-agent and Trident compatibility mode are also available, the latter negotiating document mode via X-UA-Compatible and injecting legacy DOM shims. Every tab owns an independent QWebEngineProfile, so engine and user agent can be isolated per tab.
-
-• Live English-to-Chinese translation — visible page text is extracted and translated sentence by sentence, then terminology unification and colloquial rewriting are applied before writing the result back into the DOM; the original can be restored with one click. Backends: MyMemory (free), Google, LibreTranslate, or a custom endpoint.
-
-• High-speed download engine — up to 32 parallel connections per file with dynamic rebalancing, throttling and resume support, plus automatic archiving into video, music, program, archive and document folders.
-
-• Interface — multi-tab browsing, separate address bar, history, bookmarks, find-in-page, download manager, developer tools, resolution-aware scaling, incognito windows, printing and PDF export.
-
-The Windows installer is fully self-contained: it bundles the complete Qt 6 runtime (platform plugins, WebEngine renderer process and resources, ICU data, V8 snapshots), a Python runtime, the VC++ runtime, Chinese fonts and the Rust native core, so it runs on a machine with no preinstalled software or environment.
+  • Live English-to-Chinese translation — visible page text is extracted and translated sentence by sentence, with terminology unification and colloquial rewriting applied before the result is written back into the DOM; one click restores the original.
 Tags:
 - browser
 - translation

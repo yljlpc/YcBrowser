@@ -227,6 +227,19 @@ QT_QPA_PLATFORM=offscreen python tools/test_browser.py
 
 ---
 
+## Contributing
+
+- [CONTRIBUTING.md](CONTRIBUTING.md) — how to build, test and submit a pull
+  request.
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — code of conduct.
+- [SECURITY.md](SECURITY.md) — how to report a security issue privately.
+- [requirements.txt](requirements.txt) — Python dependencies.
+
+> The `main` branch is protected: changes land through pull requests and need
+> at least one approving review. Build scripts and CI configuration are
+> reviewed source as well — this directly implements the SignPath Foundation
+> requirement that a binary must be traceable to reviewed source.
+
 ## Third-party components
 
 - **[SwiftDL](https://github.com/harshsinghsv/swiftdl)** (MIT) — the download

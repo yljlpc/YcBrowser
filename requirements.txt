@@ -1,0 +1,17 @@
+# Yc浏览器 —— Python 依赖
+#
+# 运行（开发模式）:
+#     python -m src.main
+#
+# 打包（Windows）:
+#     pip install -r requirements.txt
+#     python installer/build_windows.py
+#
+# Rust 原生核心需另行构建：cd core && cargo build --release
+
+# --- 运行时 -------------------------------------------------------------
+PyQt6>=6.6
+PyQt6-WebEngine>=6.6
+
+# --- 构建 / 打包 --------------------------------------------------------
+pyinstaller>=6.0
