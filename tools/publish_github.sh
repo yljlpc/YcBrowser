@@ -121,6 +121,22 @@ if [ "$DRY_RUN" -eq 0 ]; then
     git push -u origin main
 fi
 
+# ---------- README 占位符替换 ----------
+# README 中的 Releases 链接是占位符 your-org，发布后替换为真实地址
+PLACEHOLDER="https://github.com/your-org/${REPO_SLUG}"
+REAL_URL="https://github.com/${TARGET_REPO}"
+if grep -q "$PLACEHOLDER" README.md 2>/dev/null; then
+    if [ "$DRY_RUN" -eq 1 ]; then
+        echo "  [dry-run] 将把 README 中的占位链接替换为 $REAL_URL"
+    else
+        sed -i "s|${PLACEHOLDER}|${REAL_URL}|g" README.md
+        git add README.md
+        git commit -m "docs: 更新 README 中的仓库链接为 ${TARGET_REPO}"
+        git push origin main
+        echo "✓ README 占位链接已替换并推送"
+    fi
+fi
+
 # ---------- Release ----------
 echo ""
 echo "=== 5/6 创建 Release ==="

@@ -98,9 +98,11 @@ sudo apt install ./omnibrowser_<版本>_amd64.deb
 
 下载 `YcBrowser-<版本>-setup.exe` 安装，或直接运行便携目录中的 `OmniBrowser.exe`。
 
-> Windows 发行包使用 Authenticode 数字签名。签名证书由
-> [SignPath Foundation](https://signpath.org) 提供 —— 该机构核验二进制
-> 确实构建自本仓库的公开源码，并向其用户背书。
+> **签名状态**：当前发布包的 Windows 安装包使用**自签名证书**（仅用于开发与
+> 内部验证），Windows 会提示「未知发布者」，请手动确认后再运行。
+> 正式发布将接入 [SignPath Foundation](https://signpath.org) 的免费开源签名
+> 服务 —— 该机构核验二进制确实构建自本仓库的公开源码，并向其用户背书。
+> 详见 [docs/04-windows-code-signing.md](docs/04-windows-code-signing.md)。
 
 ---
 
@@ -133,8 +135,12 @@ python -m src.main
 ```bash
 # Linux（openKylin + deepin 双包）
 ./build_one_click.sh --linux
+# 或直接调用底层脚本（更可控）
+bash package/build_debs.sh
 
 # Windows（便携目录 + NSIS 安装包）
+python installer/build_windows.py
+# Win11 专用安装包（DPI 感知、任务栏固定等）
 python build_windows_win11.py
 ```
 

@@ -34,6 +34,7 @@ import datetime
 import glob
 import os
 import shutil
+import struct
 import subprocess
 import sys
 
@@ -231,6 +232,114 @@ def cmd_sign(args):
     return cmd_verify(args)
 
 
+def _pe_has_signature(path):
+    """检查 PE 文件是否带有 Authenticode 签名。
+
+    直接解析 PE 头的数据目录（IMAGE_DIRECTORY_ENTRY_SECURITY，即索引 4）：
+    该项的 Size 非 0 即表示文件末尾附带了 WIN_CERTIFICATE 签名块。
+
+    之所以不用 PowerShell 的 Get-AuthenticodeSignature 逐个查：一是每文件
+    启动一次进程开销大，二是其输出通道（CLIXML）在批量场景下容易出现
+    转义与编码问题。纯解析更确定、更快。
+    """
+    try:
+        with open(path, "rb") as f:
+            # DOS 头：e_lfanew 在偏移 0x3C
+            f.seek(0x3C)
+            lfanew = struct.unpack("<I", f.read(4))[0]
+            if lfanew < 0x40 or lfanew > 0x10000:
+                return False
+
+            f.seek(lfanew)
+            if f.read(4) != b"PE\x00\x00":
+                return False
+
+            # COFF 头：Machine(2) + NumberOfSections(2) + ... + SizeOfOptionalHeader(2)
+            coff = f.read(20)
+            size_opt = struct.unpack("<H", coff[16:18])[0]
+            if size_opt == 0:
+                return False
+
+            # 可选头：Magic 决定 PE32 / PE32+
+            opt_start = f.tell()
+            magic = struct.unpack("<H", f.read(2))[0]
+            if magic == 0x10B:      # PE32
+                dd_offset = opt_start + 96
+            elif magic == 0x20B:    # PE32+
+                dd_offset = opt_start + 112
+            else:
+                return False
+
+            # 数据目录第 5 项（索引 4）= Certificate Table
+            f.seek(dd_offset + 4 * 8)
+            _cert_offset, cert_size = struct.unpack("<II", f.read(8))
+            return cert_size > 0
+    except (OSError, struct.error):
+        return False
+
+
+def cmd_sign_tree(args):
+    """批量签名目录树下的所有可执行文件（.exe / .dll / .pyd）。
+
+    背景：PyInstaller 产物里的 Python 扩展模块（.pyd）不带 Authenticode
+    签名。在启用了 Windows 应用控制策略（WDAC/AppLocker）的机器上，
+    未签名的 .pyd 会被系统直接拦截，导致「DLL load failed ... 应用程序
+    控制策略已阻止此文件」。因此发布前必须对产物逐个签名。
+
+    已由原厂签名的文件（Qt 官方 DLL 等）会被跳过，保留其原有签名。
+    """
+    signtool = find_signtool()
+    if not signtool:
+        print("❌ 未找到 signtool.exe，请安装 Windows SDK")
+        return 1
+    if not os.path.isdir(args.directory):
+        print(f"❌ 目录不存在: {args.directory}")
+        return 1
+
+    # 1) 收集目标文件并检查签名状态
+    targets = []
+    for dirpath, _dirnames, filenames in os.walk(args.directory):
+        for fn in filenames:
+            if fn.lower().endswith((".exe", ".dll", ".pyd")):
+                targets.append(os.path.join(dirpath, fn))
+    if not targets:
+        print("目录下没有需要签名的文件")
+        return 0
+
+    unsigned = [t for t in targets if not _pe_has_signature(t)]
+    print(f"扫描到 {len(targets)} 个可执行文件")
+    print(f"已有签名（跳过）: {len(targets) - len(unsigned)} 个")
+    print(f"待签名: {len(unsigned)} 个")
+
+    if not unsigned:
+        return 0
+
+    # 2) 逐个签名
+    ok, failed = 0, 0
+    for i, f in enumerate(unsigned, 1):
+        cmd = [signtool, "sign"]
+        if args.pfx:
+            cmd += ["/f", args.pfx]
+            if args.password:
+                cmd += ["/p", args.password]
+        else:
+            cmd += ["/a"]
+        cmd += ["/fd", "SHA256", "/tr", args.timestamp, "/td", "SHA256", "/v", f]
+        rr = run(cmd)
+        if rr.returncode == 0:
+            ok += 1
+        else:
+            failed += 1
+            print(f"  ✗ 签名失败: {f}")
+            if rr.stderr:
+                print("    " + rr.stderr.strip().splitlines()[-1])
+        if i % 25 == 0:
+            print(f"  ...进度 {i}/{len(unsigned)}")
+
+    print(f"\n✅ 签名完成：成功 {ok}，失败 {failed}")
+    return 0 if failed == 0 else 1
+
+
 def cmd_verify(args):
     """验证 Authenticode 签名。"""
     signtool = find_signtool()
@@ -266,6 +375,13 @@ def main():
     p = sub.add_parser("verify", help="验证签名")
     p.add_argument("file")
     p.set_defaults(func=cmd_verify)
+
+    p = sub.add_parser("sign-tree", help="批量签名目录下的 .exe/.dll/.pyd")
+    p.add_argument("directory")
+    p.add_argument("--pfx", help="PFX 证书路径（省略则自动选证书库中的证书）")
+    p.add_argument("--password", help="PFX 密码")
+    p.add_argument("--timestamp", default=DEFAULT_TIMESTAMP_URL, help="RFC3161 时间戳服务器")
+    p.set_defaults(func=cmd_sign_tree)
 
     args = parser.parse_args()
     if not getattr(args, "func", None):

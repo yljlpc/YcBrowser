@@ -98,6 +98,62 @@ def run(cmd, cwd=None):
     subprocess.check_call(cmd, cwd=cwd)
 
 
+def _qt_runtime_args():
+    """构造显式收集 Qt6 运行时资源的 PyInstaller 参数。
+
+    目标：产物必须能在**没有任何预装软件**的干净 Windows 上运行。
+
+    PyInstaller 自带的 hook-PyQt6.py 靠在隔离子进程中 import
+    PyQt6.QtCore 来探测 Qt 路径。在启用了 Windows 应用控制策略的机器上
+    该 import 会被拦截，hook 整段跳过 —— 结果是产物缺少平台插件、
+    WebEngine 子进程与资源包，双击即报
+    "no Qt platform plugin could be initialized"。
+
+    因此这里不依赖 hook，直接把 Qt6 的运行时目录整体纳入：
+
+      bin/         全部 Qt6 DLL + VC++ 运行时 + opengl32sw（软件渲染回退）
+                   + qt.conf（决定 Qt 到哪里找插件，缺了插件必然找不到）
+      plugins/     平台插件（qwindows.dll）、图像格式、样式、图标引擎、TLS
+      resources/   WebEngine 的 pak 资源包与 ICU 数据
+      translations/界面翻译
+      qml/         QML 运行时（WebEngine 间接依赖）
+    """
+    import sysconfig
+
+    try:
+        sp = sysconfig.get_paths()["purelib"]
+    except Exception:
+        sp = os.path.join(sys.path[0], "site-packages")
+    qt6 = os.path.join(sp, "PyQt6", "Qt6")
+
+    args = []
+    if not os.path.isdir(qt6):
+        print("⚠️ 未找到 PyQt6/Qt6 运行时目录：", qt6)
+        return args
+
+    # 整目录收集：bin / plugins / resources / translations / qml
+    for sub in ("bin", "plugins", "resources", "translations", "qml"):
+        src = os.path.join(qt6, sub)
+        if os.path.isdir(src):
+            args += ["--add-data", f"{src};PyQt6/Qt6/{sub}"]
+            print(f"✓ 收集 Qt6/{sub}")
+        else:
+            print(f"⚠️ Qt6/{sub} 不存在，跳过")
+
+    # WebEngine 子进程程序：渲染进程，缺失则网页无法加载。
+    # bin 目录已整体收集，这里再以 binary 形式补一次，确保被标记为可执行。
+    for exe_name in ("QtWebEngineProcess.exe", "Qt6WebEngineProcess.exe"):
+        exe = os.path.join(qt6, "bin", exe_name)
+        if os.path.isfile(exe):
+            args += ["--add-binary", f"{exe};PyQt6/Qt6/bin"]
+            print("✓ 收集 WebEngine 进程：", exe)
+            break
+    else:
+        print("⚠️ 未找到 WebEngine 进程程序，网页渲染可能不可用")
+
+    return args
+
+
 def main():
     parser = argparse.ArgumentParser(description="Windows 构建脚本")
     parser.add_argument(
@@ -115,7 +171,15 @@ def main():
         action="store_true",
         help="对安装包执行 Authenticode 签名"
     )
+    parser.add_argument(
+        "--sign-password",
+        default=os.environ.get("YC_SIGNING_PASSWORD", ""),
+        help="PFX 密码（默认取环境变量 YC_SIGNING_PASSWORD）"
+    )
     args = parser.parse_args()
+    # 统一走环境变量，sign_tree / sign_artifact 都从这里取 PFX 密码
+    if args.sign_password:
+        os.environ["YC_SIGNING_PASSWORD"] = args.sign_password
 
     # 根据参数决定是否递增版本号
     VERSION = get_version_with_bump(args.auto_bump)
@@ -180,21 +244,56 @@ def main():
         "--icon", ICO,
         "--paths", SRC,
         "--add-binary", f"{CORE_EXE};.",
-        "--collect-submodules", "PyQt6",
+        "--hidden-import", "PyQt6.QtCore",
+        "--hidden-import", "PyQt6.QtGui",
+        "--hidden-import", "PyQt6.QtWidgets",
+        "--hidden-import", "PyQt6.QtPrintSupport",
         "--hidden-import", "PyQt6.QtWebEngineCore",
         "--hidden-import", "PyQt6.QtWebEngineWidgets",
-        "--hidden-import", "PyQt6.QtWebEngineQuick",
+        "--hidden-import", "PyQt6.sip",
         "--noconfirm",
         entry,
     ]
+
+    # 运行时钩子：显式设置 QT_PLUGIN_PATH 等环境变量，
+    # 让 Qt 能找到平台插件、webengine 进程与资源包。
+    # PyInstaller 自带 hook 会做这件事，但它在启用应用控制策略的机器上
+    # 会被整体跳过，因此这里自带一份。
+    hook = os.path.join(ROOT, "installer", "_qt_runtime_hook.py")
+    if os.path.isfile(hook):
+        cmd += ["--runtime-hook", hook]
+        print("✓ 使用运行时钩子：", hook)
     if font_dir:
         cmd += ["--add-data", f"{font_dir};fonts"]
+
+    # ---- Qt6 运行时资源（显式收集，不依赖 PyInstaller 的 hook）----
+    #
+    # 为什么必须显式收集：PyInstaller 的 hook-PyQt6.py 靠在隔离的子进程里
+    # import PyQt6.QtCore 来探测 Qt 安装路径。在启用了 Windows 应用控制
+    # 策略（WDAC/AppLocker）的机器上，这个 import 会被系统策略拦截
+    # （ImportError: DLL load failed ... 应用程序控制策略已阻止此文件），
+    # 导致 pyqt6_library_info.version 为 None，hook 整段被跳过。
+    # 后果是产物里没有 plugins/platforms/qwindows.dll，
+    # 双击即报 "no Qt platform plugin could be initialized"。
+    #
+    # 平台插件、WebEngine 子进程、资源包都是运行必需，因此在此逐项显式收集。
+    cmd += _qt_runtime_args()
+
     run(cmd)
 
     print("\n完成：", dist)
     print("版本：", VERSION)
 
-    # 4) 打成 NSIS 安装包
+    # 4) 签名产物树（.pyd / .dll / .exe）
+    #
+    # 这一步不是可有可无的装饰：PyInstaller 产物里的 Python 扩展模块
+    # （PyQt6 的 *.pyd）不带 Authenticode 签名，在启用了 Windows 应用
+    # 控制策略的机器上会被系统直接拦截，表现为
+    # "DLL load failed while importing QtCore: 应用程序控制策略已阻止此文件"。
+    # 因此先把整个产物树签好，再打安装包。
+    sign_tree(dist)
+
+    # 5) 打成 NSIS 安装包
     if args.no_installer:
         print("已跳过安装包构建（--no-installer）")
         return 0
@@ -207,7 +306,7 @@ def main():
     print("✅ 安装包：", exe_path)
     print("   大小：%.1f MB" % (os.path.getsize(exe_path) / 1024 / 1024))
 
-    # 5) Authenticode 签名（可选：需要证书 / Azure Artifact Signing）
+    # 6) 签名安装包本身
     if args.sign:
         sign_artifact(exe_path)
     else:
@@ -215,6 +314,46 @@ def main():
         print("      「未知发布者」并可能触发 SmartScreen 提示。")
         print("      签名方式见 docs/04-windows-code-signing.md")
     return 0
+
+
+def sign_tree(directory):
+    """对整个产物目录下的 .exe / .dll / .pyd 执行 Authenticode 签名。
+
+    已带原厂签名（Qt 官方 DLL 等）的文件会被自动跳过，保留其原签名。
+    """
+    sys.path.insert(0, os.path.join(ROOT, "tools"))
+    try:
+        import sign_windows
+    except ImportError as exc:
+        print(f"⚠️ 无法加载签名模块 tools/sign_windows.py: {exc}")
+        return False
+
+    if not sign_windows.find_signtool():
+        print("⚠️ 未找到 signtool.exe，跳过产物树签名")
+        print("   安装 Windows SDK：winget install Microsoft.WindowsSDK")
+        return False
+
+    pfx = os.environ.get("YC_SIGNING_PFX") or os.path.join(
+        ROOT, "installer", "yc-signing.pfx")
+    pwd = os.environ.get("YC_SIGNING_PASSWORD", "")
+    _target_dir = directory
+
+    class _Args:
+        pass
+
+    _Args.directory = _target_dir
+    _Args.pfx = pfx if os.path.isfile(pfx) else None
+    _Args.password = pwd or None
+    _Args.timestamp = sign_windows.DEFAULT_TIMESTAMP_URL
+
+    if _Args.pfx is None and not sign_windows.list_personal_certs():
+        print("⚠️ 没有可用的签名凭据，产物树保持未签名")
+        print("   · 本机测试：python tools/sign_windows.py selfsign --password ycbuild")
+        print("   · 正式发布：申请 SignPath Foundation 免费证书")
+        return False
+
+    print("\n=== 签名产物树 ===")
+    return sign_windows.cmd_sign_tree(_Args()) == 0
 
 
 def sign_artifact(path):
@@ -239,13 +378,18 @@ def sign_artifact(path):
     pfx = os.environ.get("YC_SIGNING_PFX") or os.path.join(
         ROOT, "installer", "yc-signing.pfx")
     pwd = os.environ.get("YC_SIGNING_PASSWORD", "")
+    _target = path
 
+    # 注意：类体作用域看不到函数局部变量，因此先取出再赋值，
+    # 否则 `file = path` 会抛 NameError。
     class _Args:
-        file = path
-        pfx = pfx if os.path.isfile(pfx) else None
-        password = pwd or None
-        name = None
-        timestamp = sign_windows.DEFAULT_TIMESTAMP_URL
+        pass
+
+    _Args.file = _target
+    _Args.pfx = pfx if os.path.isfile(pfx) else None
+    _Args.password = pwd or None
+    _Args.name = None
+    _Args.timestamp = sign_windows.DEFAULT_TIMESTAMP_URL
 
     if _Args.pfx is None and not sign_windows.list_personal_certs():
         print("❌ 没有可用的签名凭据：")
