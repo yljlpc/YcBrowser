@@ -19,6 +19,13 @@ import os
 import struct
 import sys
 
+# Windows 控制台默认代码页无法输出中文，强制 UTF-8。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from audit_dependencies import parse_pe_imports, is_system_dll  # noqa: E402
 

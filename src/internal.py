@@ -2,8 +2,8 @@
 
 from .version import VERSION
 
-FONT_STACK = '"方正书宋简体","仿宋_GB2312","Noto Sans CJK SC",sans-serif'
-HEADING_STACK = '"方正小标宋简体","方正小标宋_GBK","Noto Serif CJK SC",serif'
+FONT_STACK = '"方正书宋简体","仿宋_GB2312","Noto Serif SC","Noto Sans CJK SC",sans-serif'
+HEADING_STACK = '"方正小标宋简体","方正小标宋_GBK","Noto Serif SC","Noto Serif CJK SC",serif'
 
 DIALED_SITES = [
     ("百度", "https://www.baidu.com"),

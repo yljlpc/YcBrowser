@@ -11,9 +11,10 @@ TEXT = "#20242b"
 MUTED = "#7b828c"
 HOVER = "#f0f3f7"
 
-# 字体回退：优先使用随附中文字体，保证中文界面整洁。
-FONT_STACK = '"方正书宋简体","仿宋_GB2312","Noto Sans CJK SC","WenQuanYi Micro Hei",sans-serif'
-HEADING_STACK = '"方正小标宋简体","方正小标宋_GBK","Noto Serif CJK SC",serif'
+# 字体回退：优先使用本机已安装的方正系列字体（开发环境观感不变），
+# 其次使用随包分发的开源思源宋体（CI 与正式分发包内），最后回落到系统字体。
+FONT_STACK = '"方正书宋简体","仿宋_GB2312","Noto Serif SC","Noto Sans CJK SC","WenQuanYi Micro Hei",sans-serif'
+HEADING_STACK = '"方正小标宋简体","方正小标宋_GBK","Noto Serif SC","Noto Serif CJK SC",serif'
 
 STYLE = f"""
 QMainWindow, QWidget {{

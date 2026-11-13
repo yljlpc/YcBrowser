@@ -15,6 +15,14 @@
 import os
 import sys
 
+# Windows 控制台默认使用 ANSI 代码页（cp936/cp1252），直接 print 中文会抛
+# UnicodeEncodeError。构建脚本与 CI 都输出中文，强制切到 UTF-8。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 R = []

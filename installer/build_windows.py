@@ -22,6 +22,14 @@ import sys
 import re
 import argparse
 
+# Windows 控制台默认代码页无法输出中文，强制 UTF-8，避免构建日志抛
+# UnicodeEncodeError（CI 与本地 cmd/powershell 均会受影响）。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS = os.path.join(ROOT, "assets")
 SRC = os.path.join(ROOT, "src")

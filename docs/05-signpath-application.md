@@ -36,69 +36,89 @@ SignPath Foundation 的官方资格要求：
 - [x] **OSI 认可的开源许可证**（不允许双许可）→ 本项目用 **MIT** ✅ 已就绪
 - [x] **无恶意软件 / 无潜在不受欢迎程序** ✅
 - [x] **项目仍在积极维护** ✅
-- [ ] **已有至少一个已发布版本**（以可签名的形式）← 待完成
+- [ ] **已有至少一个已发布版本**（以可签名的形式）← 待完成（CI 构建中）
 - [x] **下载页有功能说明** → 已建 [README.md](../README.md) ✅
-- [ ] **GitHub 仓库公开** ← 待完成
-- [ ] **构建流程完全自动化** → 已建 [.github/workflows/build-windows.yml](../.github/workflows/build-windows.yml) ✅
-- [ ] **GitHub 与 SignPath 账号均启用 MFA** ← 待完成
-- [ ] **SignPath 账号有 API Token**（Submitter 权限）← 待完成
+- [x] **GitHub 仓库公开** → <https://github.com/yljlpc/YcBrowser> ✅ 已完成
+- [x] **构建流程完全自动化** → 已建 [.github/workflows/build-windows.yml](../.github/workflows/build-windows.yml) ✅
+- [ ] **GitHub 与 SignPath 账号均启用 MFA** ← 待完成（需账号持有人操作）
+- [ ] **SignPath 账号有 API Token**（Submitter 权限）← 获批后在控制台创建
+- [ ] **仓库已开启 2FA 要求**（要求所有贡献者启用 MFA）← 待完成
+
+> 📋 **逐字段表单答案**：见 [docs/07-signpath-form-answers.md](07-signpath-form-answers.md)
+> —— 该文件按 signpath.org/apply 的真实字段逐条给出可直接粘贴的答案。
+> ⚠️ **可见度是最大的不确定因素**，见下文「申请前必做的准备」。
 
 ---
 
 ## 三、逐步操作
 
-### 步骤 1：初始化 Git 仓库并推到 GitHub
+### 步骤 1：初始化 Git 仓库并推到 GitHub ✅ 已完成
 
-**当前状态：工作区不是 Git 仓库**（无 `.git`），这是 SignPath 的硬性阻碍 ——
-SignPath 需要把 GitHub 注册为「可信构建系统」，并核验产物来自该仓库。
+仓库已初始化并推送到公开 GitHub 仓库：
 
-```bash
-cd F:/2026-11-10-21-14-21
-git init
-git add -A
-git commit -m "Initial commit: Yc浏览器 v1.1.13"
+```
+https://github.com/yljlpc/YcBrowser
 ```
 
-创建 GitHub 仓库（**必须 Public**），然后：
+- 分支：`main`（8+ 次提交，含完整构建链路与签名策略）
+- 标签：`v1.1.13`（指向 `3ccd08d`）
+- 工作区干净，无构建产物入库
 
-```bash
-git remote add origin https://github.com/<你的账号>/yc-browser.git
-git push -u origin main
-```
+### 步骤 2：清理不应入库的产物 ✅ 已完成
 
-> ⚠️ **推送前必须处理**：仓库体积很大（`package/` 有 6.4GB、`_stage/` 有大量产物）。
-> 这些**不应进版本库**，请先写 `.gitignore`（见下一节）。
+已写入 [.gitignore](../.gitignore)，实际入库 **98 个文件 / 约 1.3 MB**：
 
-### 步骤 2：清理不应入库的产物
+- 排除：`/dist/`、`/build/`、`*.spec`、`/installer/*.exe`、`/installer/*.pfx`、
+  `/core/target/`、`/_stage/`、`package/` 下的产物、`__pycache__` 等
+- 保留：`LICENSE`、`README.md`、`docs/`、`.github/workflows/`、`src/`、
+  `core/src/`、`installer/*.py`、`installer/*.nsi`、`tools/`、`assets/`、
+  `CODE_SIGNING_POLICY.md`、`PRIVACY.md`
 
-SignPath 会审阅你的仓库。需要提交的是**源码**，不是构建产物。
+> 这些正是 SignPath 审阅的对象，缺一不可。
 
-建议 `.gitignore`：
+### 步骤 2.5：申请前必做的准备（决定成败的一步）
 
-```gitignore
-# 构建产物
-/dist/
-/build/
-/package/
-/installer/*.exe
-/installer/*.pfx
-/installer/omnibrowser.ico
-*.spec
+> ⚠️ **这是本项目目前最大的风险点，务必正视。**
+>
+> 2026 年 10 月有一个公开案例：某开源项目（piscout）提交 SignPath
+> Foundation 申请后被 **Declined**，官方理由是
+> **"for lack of public visibility, not for quality"** ——
+> 即项目质量没问题，而是**没有足够的外部可见度信号**。
+>
+> 基金会考察的不是代码写得好不好，而是**"这是一个有人在用的真实项目吗"**。
 
-# 中间文件
-/core/target/
-/_stage/
-/__pycache__/
-*.pyc
-.pytest_cache/
+基金会通常看重的信号：
 
-# 运行时数据
-*.omnidl
-```
+| 信号 | 说明 | 本项目现状 |
+|---|---|---|
+| GitHub Stars / Forks | 最基础的社区认可度 | ⬜ 目前为 0，需要积累 |
+| 外部贡献者 | 非作者本人提交的 PR / Issue | ⬜ 无 |
+| 独立第三方讨论 | 非作者撰写的文章、Reddit / Stack Overflow / 社区帖子 | ⬜ 无 |
+| 机构或组织背书 | 被某个开源组织收录、赞助、推荐 | ⬜ 无 |
+| 持续活跃 | 多个版本、规律更新、Issue 有响应 | ✅ v1.1.13，CI 持续构建 |
+| 发行渠道分发 | 被 winget / Chocolatey 等官方仓库收录 | ⬜ 未提交 |
 
-> **注意**：`LICENSE`、`README.md`、`docs/`、`.github/workflows/`、
-> `src/`、`core/src/`、`installer/*.py`、`installer/*.nsi`、`tools/`、
-> `assets/` **必须入库** —— 这些是 SignPath 审阅的对象。
+**申请前能立刻做的（不需要等用户量）**：
+
+1. **提交 winget manifest** —— 这是最强的「分发渠道」信号，且技术上可独立完成。
+   本项目已产出标准 NSIS 安装包，winget 支持 `InstallerType: nullsoft`，
+   只需要一个 PR 到 `microsoft/winget-pkgs`：
+   ```
+   manifests/m/YcBrowser/YcBrowser/1.1.13/YcBrowser.installer.yaml
+   manifests/m/YcBrowser/YcBrowser/1.1.13/YcBrowser.yaml
+   ```
+   `winget create` 可自动生成初稿。收录后即成为官方分发渠道。
+2. **写一篇技术文章** —— 介绍 Rust 核心 + PyQt6 + QtWebEngine 的打包与
+   完全独立交付实践（解决 WDAC 拦截、Qt 插件缺失、离线安装包体积控制等），
+   发到掘金 / 知乎 / CSDN / Reddit r/Python / Hacker News。
+   **必须是第三方视角的真实技术内容**，不得伪装成独立推荐。
+3. **持续发版并回复 Issue** —— 保持提交节奏与 Issue 响应本身就是活跃度证据。
+4. **完善 README 英文版** —— 基金会审阅者多为国际审阅人，纯中文 README 会
+   增加理解成本与「仅面向国内用户」的顾虑。英文 README 不是必需项，
+   但会明显降低审阅摩擦。
+
+**申请时机建议**：完成上述 1、2 项后再提交，一次通过率显著更高。
+若被拒，官方允许在积累起足够可见度后再次申请。
 
 ### 步骤 3：启用 MFA
 
@@ -169,9 +189,27 @@ My Profile → API Tokens → Create API Token
 | `SIGNPATH_ORGANIZATION_ID` | 组织 ID | SignPath 面板 URL 或设置页 |
 | `SIGNPATH_PROJECT_SLUG` | 项目 slug | SignPath 面板 URL |
 | `SIGNPATH_SIGNING_POLICY_SLUG` | 通常为 `release-signing` | SignPath 面板 |
+| `SIGNPATH_ARTIFACT_CONFIGURATION_SLUG` | 上一步的产物配置名 | SignPath 面板 |
 
-> 也可以用 **Repository Variables**（非 Secret）存 Organization ID 等非敏感值。
-> 但 **API Token 必须是 Secret**。
+另需设置一个**仓库变量**（Repository Variables，非 Secret）作为总开关：
+
+| 变量名 | 值 | 说明 |
+|---|---|---|
+| `SIGNPATH_ENABLED` | `true` | 不设或非 `true` 时签名步骤整体跳过 |
+
+> Repository → Settings → Secrets and variables → **Actions** →
+> `New repository secret` 与 `New repository variable` 两个页签分别添加。
+>
+> **为什么需要开关**：`secrets` context 不能直接用于 `if` 条件表达式，
+> 工作流因此把签名配置提升为 **job 级 `env`**，再用 `vars.SIGNPATH_ENABLED`
+> 作为显式开关 —— 这样在还没获批、secrets 为空时，签名步骤会干净跳过，
+> 而不会因为读不到 secret 报错。
+
+> ⚠️ **GitHub Action 名称必须是** `SignPath/github-action-submit-signing-request@v3`。
+> 早期版本误用的 `signpath/signpath-action` **仓库并不存在**，会导致整个
+> workflow 在「准备 action」阶段就失败 —— **即使该步骤被 `if` 跳过**，
+> 因为 GitHub 会在 job 开始前预下载所有 `uses:` 引用的 action。
+> 这一点已在本项目实际踩坑并修复。
 
 ### 步骤 7：触发签名
 
@@ -352,7 +390,8 @@ SignPath 支持 Windows 可执行文件、MSI、CAB、APX/MSIX、**NuGet**、
 - 控制台：<https://app.signpath.io>
 - 文档：<https://about.signpath.io/documentation>
 - **官方条款（资格条件）：<https://www.signpath.org/terms>**
-- GitHub Action：<https://github.com/signpath/signpath-action>
+- **GitHub Action（正确地址）：<https://github.com/SignPath/github-action-submit-signing-request>**
+- 逐字段表单答案：[docs/07-signpath-form-answers.md](07-signpath-form-answers.md)
 - 已签名项目参考：<https://super-productivity.com/code-signing/>
 - Azure Artifact Signing（备选）：<https://learn.microsoft.com/azure/trusted-signing/>
 - 微软 Authenticode：<https://learn.microsoft.com/windows/win32/seccrypto/>
