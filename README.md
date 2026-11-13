@@ -219,7 +219,9 @@ QT_QPA_PLATFORM=offscreen python tools/test_browser.py
 ## 第三方组件
 
 本项目移植了 [SwiftDL](https://github.com/harshsinghsv/swiftdl)（MIT）的下载引擎
-算法内核。完整的第三方组件与许可证声明见 [LICENSE](LICENSE)。
+算法内核。完整的第三方组件与许可证声明见
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)，本项目自身许可证见
+[LICENSE](LICENSE)。
 
 ## 代码签名与隐私
 
