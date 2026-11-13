@@ -255,7 +255,8 @@ QT_QPA_PLATFORM=offscreen python tools/test_browser.py
   (`fonts/OFL.txt`).
 
 The complete third-party component and licence notice is in
-[LICENSE](LICENSE).
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). This project's own licence is
+[MIT](LICENSE).
 
 ## Code signing and privacy
 

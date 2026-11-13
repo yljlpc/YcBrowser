@@ -73,7 +73,8 @@
 ## 上游组件
 
 随包分发的第三方组件（如 Qt 6、PyQt6、Rust crates）保留其各自原有签名或许可证，
-不由本项目的证书重新签名。完整清单见 [LICENSE](../LICENSE)。
+不由本项目的证书重新签名。完整清单见
+[THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)。
 
 ## 报告问题
 
