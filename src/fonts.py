@@ -31,6 +31,14 @@ def _font_search_dirs():
 
     here = os.path.dirname(os.path.abspath(__file__))  # src/
     pkg = os.path.normpath(os.path.join(here, "..", "fonts"))
+
+    # 冻结运行（PyInstaller）时，src 包被编译进 PYZ 归档，__file__ 指向
+    # 归档内的虚拟路径，此时「../fonts」解析不到实际目录。
+    # 真实目录在 sys._MEIPASS（one-folder 模式即 _internal）下。
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        pkg = os.path.join(meipass, "fonts")
+
     if sys.platform == "win32":
         # Windows：优先用随包字体目录，回退到系统字体目录。
         sysroot = os.environ.get("SystemRoot", r"C:\Windows")

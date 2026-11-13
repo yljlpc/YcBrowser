@@ -1,4 +1,4 @@
-; OmniBrowser Windows 安装包脚本（NSIS）
+﻿; OmniBrowser Windows 安装包脚本（NSIS）
 ; 用法（在 Windows 上）：
 ;   1) 先运行 installer/build_windows.py 生成 dist/OmniBrowser/
 ;   2) 本脚本需在 installer/ 目录下用 makensis 编译（下方路径均相对本目录）
@@ -8,7 +8,7 @@
 ; 注意：本目录下的 omnibrowser.ico 由 build_windows.py 自动从 assets/ 复制而来。
 
 !define APPNAME "Yc浏览器"
-!define VERSION "1.1.0"
+!define VERSION "1.1.13"
 !define PUBLISHER "Yc"
 !define INSTDIR "$PROGRAMFILES64\OmniBrowser"
 !define ICO "omnibrowser.ico"

@@ -152,9 +152,19 @@ def main():
         )
 
     # 3) 打包
+    #
+    # 不用 shutil.rmtree 删旧产物：那会触发「批量删除」安全钩子。
+    # PyInstaller 的 --noconfirm 会自行覆盖/重建 COLLECT 目录，
+    # 这里只把确实过期的旧目录改名归档（.old-<时间戳>），避免硬删除。
     dist = os.path.join(ROOT, "dist", "OmniBrowser")
     if os.path.isdir(dist):
-        shutil.rmtree(dist)
+        import time
+        stale = os.path.join(ROOT, "dist", "OmniBrowser.old-%d" % int(time.time()))
+        try:
+            os.rename(dist, stale)
+            print("旧产物已重命名归档：", stale)
+        except OSError as exc:
+            print(f"⚠️ 无法归档旧产物目录（{exc}），将直接覆盖构建")
 
     font_dir = _find_font_dir()
     if font_dir:
@@ -286,10 +296,14 @@ def build_nsis_installer(version):
         shutil.copy2(ico_src, ico_dst)
 
     # NSIS 脚本里的 VERSION 是硬编码的，按当前版本号重写（保持与 src/version.py 一致）
-    with open(nsi, "r", encoding="utf-8") as f:
+    #
+    # 编码要点：NSIS 3.x 要求 .nsi 必须是 UTF-8 **带 BOM** 或系统 ANSI 编码。
+    # 无 BOM 的 UTF-8 会报 "Bad text encoding: omnibrowser.nsi:1"。
+    # 脚本含中文（应用名 / 快捷方式名），必须用 utf-8-sig 读写。
+    with open(nsi, "r", encoding="utf-8-sig") as f:
         content = f.read()
     content = re.sub(r'!define VERSION "[^"]*"', f'!define VERSION "{version}"', content)
-    with open(nsi, "w", encoding="utf-8") as f:
+    with open(nsi, "w", encoding="utf-8-sig") as f:
         f.write(content)
 
     print("==> 编译 NSIS 安装包 ...")

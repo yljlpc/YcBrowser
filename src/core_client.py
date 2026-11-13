@@ -28,6 +28,11 @@ def _find_binary():
         os.path.join(here, "..", name),
         os.path.join(here, "..", "core", "target", "release", name),
     ]
+    # 冻结运行（PyInstaller）：src 包被编译进 PYZ 归档，__file__ 指向虚拟路径，
+    # 「../」推算不到真实目录；核心 exe 实际在 sys._MEIPASS（one-folder 即 _internal）下。
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        candidates.insert(0, os.path.join(meipass, name))
     for c in candidates:
         c = os.path.normpath(c)
         if os.path.isfile(c) and os.access(c, os.X_OK):

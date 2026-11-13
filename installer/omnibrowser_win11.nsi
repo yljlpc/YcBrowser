@@ -1,4 +1,4 @@
-; Yc浏览器 Windows 11 安装包脚本（NSIS）
+﻿; Yc浏览器 Windows 11 安装包脚本（NSIS）
 ; 用法（在 Windows 上）：
 ;   1) 先运行 installer/build_windows.py 生成 dist/OmniBrowser/
 ;   2) 本脚本需在 installer/ 目录下用 makensis 编译（下方路径均相对本目录）
