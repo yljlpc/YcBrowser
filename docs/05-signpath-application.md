@@ -1,0 +1,304 @@
+# SignPath Foundation 免费签名申请指南
+
+> 目标：为零成本获得 Windows Authenticode 公开受信任签名，
+> 让 Yc浏览器 的安装包不再显示「未知发布者」，并消除 SmartScreen 干扰。
+>
+> 本文件是**可执行的申请清单** —— 按顺序做，每步都有明确的完成标准。
+
+---
+
+## 一、结论先行
+
+SignPath Foundation 是**目前唯一专门为开源项目提供免费、公开受信任
+Windows 代码签名**的方案。已获支持的项目包括：
+
+**7-Zip · Inkscape · GIMP · Flameshot · Git Extensions · Stellarium ·
+NETworkManager · Super Productivity · KoriyoZIP** 等。
+
+它的核心机制与商业 CA 完全不同：
+
+| | 商业 CA | SignPath Foundation |
+|---|---|---|
+| 证书签发给谁 | **你个人 / 你的公司** | **SignPath Foundation** |
+| 用户看到的发布者 | 你的名字 | "SignPath Foundation" |
+| 私钥在哪 | 你的硬件令牌 | **SignPath 的 HSM**（永不出域） |
+| 如何证明二进制可信 | 无法证明来自源码 | **SignPath 核验构建来自你的公开仓库** |
+
+也就是说，**SignPath 用"我为这个仓库背书"替代了"我为这个人背书"** ——
+这正是开源项目获得公开信任的唯一可行路径。
+
+---
+
+## 二、申请前置条件（全部必须满足）
+
+SignPath Foundation 的官方资格要求：
+
+- [x] **OSI 认可的开源许可证**（不允许双许可）→ 本项目用 **MIT** ✅ 已就绪
+- [x] **无恶意软件 / 无潜在不受欢迎程序** ✅
+- [x] **项目仍在积极维护** ✅
+- [ ] **已有至少一个已发布版本**（以可签名的形式）← 待完成
+- [x] **下载页有功能说明** → 已建 [README.md](../README.md) ✅
+- [ ] **GitHub 仓库公开** ← 待完成
+- [ ] **构建流程完全自动化** → 已建 [.github/workflows/build-windows.yml](../.github/workflows/build-windows.yml) ✅
+- [ ] **GitHub 与 SignPath 账号均启用 MFA** ← 待完成
+- [ ] **SignPath 账号有 API Token**（Submitter 权限）← 待完成
+
+---
+
+## 三、逐步操作
+
+### 步骤 1：初始化 Git 仓库并推到 GitHub
+
+**当前状态：工作区不是 Git 仓库**（无 `.git`），这是 SignPath 的硬性阻碍 ——
+SignPath 需要把 GitHub 注册为「可信构建系统」，并核验产物来自该仓库。
+
+```bash
+cd F:/2026-11-10-21-14-21
+git init
+git add -A
+git commit -m "Initial commit: Yc浏览器 v1.1.13"
+```
+
+创建 GitHub 仓库（**必须 Public**），然后：
+
+```bash
+git remote add origin https://github.com/<你的账号>/yc-browser.git
+git push -u origin main
+```
+
+> ⚠️ **推送前必须处理**：仓库体积很大（`package/` 有 6.4GB、`_stage/` 有大量产物）。
+> 这些**不应进版本库**，请先写 `.gitignore`（见下一节）。
+
+### 步骤 2：清理不应入库的产物
+
+SignPath 会审阅你的仓库。需要提交的是**源码**，不是构建产物。
+
+建议 `.gitignore`：
+
+```gitignore
+# 构建产物
+/dist/
+/build/
+/package/
+/installer/*.exe
+/installer/*.pfx
+/installer/omnibrowser.ico
+*.spec
+
+# 中间文件
+/core/target/
+/_stage/
+/__pycache__/
+*.pyc
+.pytest_cache/
+
+# 运行时数据
+*.omnidl
+```
+
+> **注意**：`LICENSE`、`README.md`、`docs/`、`.github/workflows/`、
+> `src/`、`core/src/`、`installer/*.py`、`installer/*.nsi`、`tools/`、
+> `assets/` **必须入库** —— 这些是 SignPath 审阅的对象。
+
+### 步骤 3：启用 MFA
+
+- **GitHub**：Settings → Password and authentication → Enable MFA（必做，SignPath 强制要求）
+- **SignPath**：注册后立即在账号设置中启用 MFA
+
+### 步骤 4：提交申请
+
+1. 访问 <https://signpath.org/apply>
+2. 填写项目信息：
+   - **项目名**：Yc浏览器 / YcBrowser
+   - **仓库 URL**：你的 GitHub 公开仓库地址
+   - **许可证**：MIT
+   - **构建系统**：GitHub Actions
+   - **产物类型**：Windows PE 可执行文件（`.exe`）
+   - **项目描述**：粘贴 README 的功能特性段落
+3. 提交后等待审核（**通常数个工作日**）
+
+审核关注点：
+- 许可证是否 OSI 认可
+- 项目是否真实可用、有实际功能
+- 是否有可疑行为（挖矿、捆绑、灰色地带功能）
+- 仓库历史是否健康
+
+### 步骤 5：配置 SignPath 面板
+
+获批后会拿到 **Organization ID** 与 **Project Slug**。登录 <https://app.signpath.io>：
+
+**5.1 添加可信构建系统**
+
+```
+Project → Trusted Build Systems → Add → GitHub.com
+→ 选择你的仓库 → 授权
+```
+
+**5.2 配置产物格式（Artifact Configuration）**
+
+SignPath 需要知道产物里哪个文件是 PE 可执行文件：
+
+```
+Configuration Name: windows-installer
+Root Element: ZIP
+PE Files:
+  - Path: YcBrowser-<version>-setup.exe
+    Product Version: 1.1.13
+```
+
+> 若 GitHub 上传的是 ZIP 包裹，需在此声明 ZIP 内部结构；
+> 若直接上传 exe，则 Root Element 选 `PE`。
+
+**5.3 创建 API Token**
+
+```
+My Profile → API Tokens → Create API Token
+  Name: "GitHub Actions"
+  Permissions: Submitter
+```
+
+**Token 只显示一次**，立刻保存。
+
+### 步骤 6：配置 GitHub Secrets
+
+仓库 → Settings → Secrets and variables → Actions → New repository secret：
+
+| Secret 名称 | 值 | 来源 |
+|---|---|---|
+| `SIGNPATH_API_TOKEN` | 上一步保存的 Token | SignPath 面板 |
+| `SIGNPATH_ORGANIZATION_ID` | 组织 ID | SignPath 面板 URL 或设置页 |
+| `SIGNPATH_PROJECT_SLUG` | 项目 slug | SignPath 面板 URL |
+| `SIGNPATH_SIGNING_POLICY_SLUG` | 通常为 `release-signing` | SignPath 面板 |
+
+> 也可以用 **Repository Variables**（非 Secret）存 Organization ID 等非敏感值。
+> 但 **API Token 必须是 Secret**。
+
+### 步骤 7：触发签名
+
+```bash
+git tag v1.1.13
+git push origin v1.1.13
+```
+
+CI 会自动：构建 → 上传产物 → 提交签名请求 → **等待你在 SignPath 面板人工审批** → 签名 → 回传。
+
+**人工审批是强制环节**，SignPath 不会自动放行 —— 这是它的安全设计。
+
+### 步骤 8：验证
+
+```powershell
+Get-AuthenticodeSignature "YcBrowser-1.1.13-setup.exe" | Format-List
+```
+
+应显示：
+
+```
+Status              : Valid
+SignerCertificate   : CN=SignPath Foundation, ...
+```
+
+或图形界面：右键 exe → 属性 → 数字签名 → 显示 **"SignPath Foundation"**。
+
+---
+
+## 四、SignPath 不解决什么
+
+**SmartScreen 信誉（SmartScreen Reputation）**
+
+即使签名有效，SmartScreen 仍可能弹窗"Windows 已保护你的电脑" ——
+这是**下载量信誉**机制，与签名有效性是两套独立的东西。
+
+- 新证书从零开始积累
+- 干净的下载量积累后，提示会逐渐消失
+- **EV 证书也不再保证即时放行** —— 微软已明确说明 OV 与 Artifact Signing
+  都需要积累信誉
+
+**唯一的加速手段**：让更多用户从官方渠道下载，积累干净的下载记录。
+
+**其他限制**：
+- 证书签发给 SignPath Foundation，用户看到的发布者不是"Yc浏览器"
+- 签名请求必须人工审批，无法完全无人值守
+- 私有/闭源版本不在支持范围内（只签公开仓库的构建产物）
+
+---
+
+## 五、如果 SignPath 审批不通过
+
+按优先级回退：
+
+### 5.1 SSL.com IV Code Signing（个人身份，无需公司）
+
+- **IV（Individual Validation）** 证书 —— 不需要注册公司，验证个人身份证件即可
+- 约 $60–$100/年
+- 私钥通过 FIPS 认证 USB 令牌或云签名服务（eSigner for Code）保存
+- 签发快（验证通过后数分钟）
+- 这是目前**唯一的国际品牌、可签个人身份**的代码签名证书
+
+```bash
+# 用 eSigner 或令牌导出 PFX 后
+python tools/sign_windows.py sign setup.exe --pfx cert.pfx --password <密码>
+```
+
+### 5.2 Certum / GDCA（中国大陆可申请）
+
+- **Certum**：欧洲 CA，通过国内授权商 SSLdun 提供
+- **GDCA（沃通）**：国内 CA，代码签名证书由微软官方推荐的 CA 签发
+- 均需企业主体（个人证书支持有限）
+
+### 5.3 自签证书（仅内部测试用）
+
+已在本机验证可行：
+
+```bash
+python tools/sign_windows.py selfsign
+python tools/sign_windows.py sign setup.exe --pfx installer/yc-signing.pfx --password ycbuild
+```
+
+**自签证书能防篡改，但不获得公开信任** —— 用户仍见"未知发布者"。
+仅适用于内部测试机（手动信任根证书）。
+
+---
+
+## 六、本机环境的一个特殊事实
+
+这台构建机启用了 **WDAC 企业签名级别强制**：
+
+```
+CodeIntegrityPolicyEnforcementStatus: 2
+UserModeCodeIntegrityPolicyEnforcementStatus: 2
+Policy ID: {0283ac0f-fff1-49ae-ada1-8a933130cad6}
+```
+
+实测结果：
+
+| 文件 | 签名状态 | 结果 |
+|---|---|---|
+| `Qt6Core.dll` | **Valid**（The QT Company Oy） | ✅ 允许加载 |
+| `QtCore.pyd` | **NotSigned** | ❌ 被策略拦截 |
+
+代码完整性日志（事件 3077）：
+> Code Integrity determined that a process (...) attempted to load
+> `...PyQt6\QtCore.pyd` that did not meet the **Enterprise signing level**
+> requirements or violated code integrity policy.
+
+**这恰恰证明了签名的价值**：在企业级策略下，**未签名的二进制根本无法运行**。
+
+**对本项目的实际影响**：
+- 打包链路本身**不受影响**（PyInstaller 在构建时静态收集 `.pyd`）
+- 但产物在**受同等策略约束**的机器上运行会被拦
+- PyQt6 的 `.pyd` 由 Riverbank 官方签名与否需实测；若未签名，
+  受管终端（企业环境、WDAC 强制）将无法运行本应用
+- 这也是**正式发布务必申请签名**的硬性理由
+
+---
+
+## 七、参考资料
+
+- SignPath Foundation 官网：<https://signpath.org>
+- 申请入口：<https://signpath.org/apply>
+- 控制台：<https://app.signpath.io>
+- 文档：<https://about.signpath.io/documentation>
+- GitHub Action：<https://github.com/signpath/signpath-action>
+- 已签名项目参考：<https://super-productivity.com/code-signing/>
+- Azure Artifact Signing（备选）：<https://learn.microsoft.com/azure/trusted-signing/>
+- 微软 Authenticode：<https://learn.microsoft.com/windows/win32/seccrypto/>

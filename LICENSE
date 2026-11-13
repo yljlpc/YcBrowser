@@ -1,0 +1,61 @@
+MIT License
+
+Copyright (c) 2026 Yc Browser (Yc浏览器)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+## 第三方组件声明
+
+本项目包含或移植了以下第三方开源组件，它们各自遵循独立的许可证：
+
+### SwiftDL（下载引擎算法内核）
+
+- 来源：https://github.com/harshsinghsv/swiftdl
+- 许可证：MIT License
+- 使用范围：
+  - `core/src/download.rs` —— 分片规划、动态再平衡、限速、断点状态、文件探测等算法内核
+  - `src/downloader.py` —— 网络层改用 Python 标准库 urllib + 线程池实现
+  - `src/media.py` —— 页面媒体嗅探的扩展 content.js 思路
+
+SwiftDL 的作者与版权声明保留在对应源文件的注释中。
+
+### Qt / PyQt6
+
+- Qt 6：https://www.qt.io/ （LGPL v3 / 商业双许可）
+- PyQt6：https://www.riverbankcomputing.com/software/pyqt/ （GPL v3 / 商业双许可）
+- Chromium / Blink（经由 QtWebEngine）：BSD 许可证及第三方许可证
+
+### Rust 标准库与运行时
+
+- https://www.rust-lang.org/ （MIT / Apache-2.0）
+
+### 随包分发的中文字体
+
+随安装包分发的方正系列、仿宋系列、楷体系列等字体，其版权与授权条款
+归各自权利人所有，具体以各字体文件内附的授权说明为准。这些字体仅用于
+界面渲染，不随源代码一同授权。
+
+---
+
+## 商标
+
+"Yc浏览器" 及其它相关标识为本项目名称。Windows、Microsoft、Chromium、
+Blink、Qt、PyQt6 等商标归各自权利人所有。

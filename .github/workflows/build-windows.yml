@@ -1,0 +1,125 @@
+name: Build Windows
+
+# SignPath Foundation 要求：构建流程必须完全自动化，且 GitHub 需被注册为
+# 「可信构建系统」（Trusted Build System）。签名步骤在 tag 推送时触发，
+# 由 SignPath 核验产物确实来自本仓库后用其 HSM 中的证书签名。
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Windows installer
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Install build dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller PyQt6 PyQt6-WebEngine
+
+      - name: Cache PyQt6 and cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            core/target
+          key: ${{ runner.os }}-build-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-build-
+
+      - name: Build Rust core
+        working-directory: core
+        run: cargo build --release
+
+      - name: Run Rust tests
+        working-directory: core
+        run: cargo test --offline
+
+      - name: Run logic tests
+        run: python tools/test_logic.py
+
+      - name: Build portable app and NSIS installer
+        run: python installer/build_windows.py --no-installer
+
+      - name: Package installer artifact
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path src/version.py -Pattern '^VERSION\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
+          $setup = "installer/YcBrowser-$version-setup.exe"
+          if (-not (Test-Path $setup)) { throw "未找到安装包: $setup" }
+          New-Item -ItemType Directory -Force -Path dist-artifact | Out-Null
+          Copy-Item $setup "dist-artifact/YcBrowser-$version-setup.exe"
+          Write-Output "ARTIFACT=dist-artifact/YcBrowser-$version-setup.exe"
+
+      - name: Upload unsigned artifact
+        id: artifact-id
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: dist-artifact/
+          if-no-files-found: error
+
+      # ------------------------------------------------------------------
+      # SignPath 签名步骤
+      #
+      # 需要仓库配置以下 Secrets（见 docs/04-windows-code-signing.md）：
+      #   SIGNPATH_API_TOKEN        — SignPath API Token（Submitter 权限）
+      #   SIGNPATH_ORGANIZATION_ID  — SignPath 组织 ID
+      #   SIGNPATH_PROJECT_SLUG     — 项目 slug
+      #   SIGNPATH_SIGNING_POLICY_SLUG — 签名策略（通常为 release-signing）
+      #
+      # 未配置这些 Secret 时本步骤自动跳过，不影响未签名构建。
+      # ------------------------------------------------------------------
+      - name: Sign with SignPath
+        if: startsWith(github.ref, 'refs/tags/v') && env.SIGNPATH_API_TOKEN != ''
+        env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ secrets.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ secrets.SIGNPATH_SIGNING_POLICY_SLUG }}
+        uses: signpath/signpath-action@v1
+        with:
+          organization-id: ${{ env.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ env.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: windows-installer
+          api-token: ${{ env.SIGNPATH_API_TOKEN }}
+          wait-for-completion: 'true'
+          github-artifact-id: ${{ steps.artifact-id.outputs.artifact-id }}
+
+      - name: Verify signature
+        if: startsWith(github.ref, 'refs/tags/v') && env.SIGNPATH_API_TOKEN != ''
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path src/version.py -Pattern '^VERSION\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
+          $setup = "dist-artifact/YcBrowser-$version-setup.exe"
+          & "${env:ProgramFiles(x86)}\Windows Kits\10\bin\10.0.22621.0\x64\signtool.exe" verify /pa /v $setup
+          if ($LASTEXITCODE -ne 0) { throw "签名验证失败" }
+
+      - name: Upload signed installer
+        if: startsWith(github.ref, 'refs/tags/v') && env.SIGNPATH_API_TOKEN != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer-signed
+          path: dist-artifact/
+          if-no-files-found: error

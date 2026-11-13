@@ -1,0 +1,35 @@
+# 构建产物
+/dist/
+/build/
+/package/
+*.spec
+/installer/*.exe
+/installer/*.pfx
+/installer/omnibrowser.ico
+
+# WorkBuddy 本地数据（非项目内容）
+/.workbuddy/
+/.Trash-0/
+/memory/
+
+# 中间文件
+/core/target/
+/_stage/
+/__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# 运行时数据
+*.omnidl
+
+# 操作系统
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# 编辑器
+.vscode/
+.idea/
+*.swp

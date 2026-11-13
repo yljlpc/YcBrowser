@@ -1,0 +1,17 @@
+#!/bin/bash
+# postinst 脚本 - 安装后设置
+
+set -e
+
+# 刷新桌面数据库和图标缓存
+echo "刷新 Yc浏览器 图标缓存..."
+if command -v update-desktop-database &> /dev/null; then
+    update-desktop-database -q /usr/share/applications 2>/dev/null || true
+fi
+
+if command -v update-icon-caches &> /dev/null; then
+    update-icon-caches -q /usr/share/icons/hicolor 2>/dev/null || true
+fi
+
+echo "✅ Yc浏览器 图标缓存已更新完成！"
+echo "提示：如果任务栏图标未立即显示，请注销并重新登录桌面环境。"
