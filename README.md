@@ -98,6 +98,11 @@ sudo apt install ./omnibrowser_<版本>_amd64.deb
 
 下载 `YcBrowser-<版本>-setup.exe` 安装，或直接运行便携目录中的 `OmniBrowser.exe`。
 
+> **完全独立**：安装包自带 Qt 6 全部运行时（平台插件、WebEngine 渲染进程与
+> 资源包、ICU 数据、V8 快照）、Python 运行时、VC++ 运行库、中文字体与
+> Rust 原生核心。目标机器**无需预装任何软件或环境**，也不会写入系统目录
+> 之外的任何依赖。
+
 > **签名状态**：当前发布包的 Windows 安装包使用**自签名证书**（仅用于开发与
 > 内部验证），Windows 会提示「未知发布者」，请手动确认后再运行。
 > 正式发布将接入 [SignPath Foundation](https://signpath.org) 的免费开源签名
@@ -144,8 +149,20 @@ python installer/build_windows.py
 python build_windows_win11.py
 ```
 
-详见 [docs/02-build-and-run.md](docs/02-build-and-run.md) 与
-[docs/04-windows-code-signing.md](docs/04-windows-code-signing.md)。
+### 验证产物完整性
+
+```bash
+# 独立安装包自检：Qt 路径解析 / 运行时钩子 / 平台插件 / WebEngine 必需清单
+#                 / 依赖闭包 / 随包资源 / 签名状态
+python tools/verify_bundle.py dist/OmniBrowser --verbose
+
+# 单独做 PE 依赖审计
+python tools/audit_dependencies.py dist/OmniBrowser --verbose
+```
+
+详见 [docs/02-build-and-run.md](docs/02-build-and-run.md)、
+[docs/04-windows-code-signing.md](docs/04-windows-code-signing.md) 与
+[docs/06-windows-standalone-build.md](docs/06-windows-standalone-build.md)。
 
 ---
 
