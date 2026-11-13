@@ -44,9 +44,15 @@
 
 | 角色 | 职责 | 成员 |
 |---|---|---|
-| **Author** | 可直接向仓库提交变更，无需额外评审 | _（待填：GitHub 用户名）_ |
-| **Reviewer** | 负责评审非 committer 提交的 PR | _（待填：GitHub 用户名）_ |
-| **Approver** | 负责批准每一次签名请求 | _（待填：GitHub 用户名）_ |
+| **Author** | 可直接向仓库提交变更，无需额外评审 | [`@yljlpc`](https://github.com/yljlpc) |
+| **Reviewer** | 负责评审非 committer 提交的 PR | [`@yljlpc`](https://github.com/yljlpc) |
+| **Approver** | 负责批准每一次签名请求 | [`@yljlpc`](https://github.com/yljlpc) |
+
+> 本项目目前由单一维护者 `yljlpc` 承担上述三种角色。SignPath Foundation
+> 要求角色职责清晰且每次签名都有人工批准，该约束通过 SignPath 控制台中
+> 配置的 approver 权限与「人工批准」签名策略落实：即使只有一名成员，
+> 签名请求也不会自动通过，必须由 approver 在 SignPath 面板中显式批准。
+> 未来引入新成员时，应将 Reviewer 角色移交给独立的评审者。
 
 > 所有团队成员均已在 **GitHub** 与 **SignPath** 账号上启用
 > **多因素认证（MFA）**。

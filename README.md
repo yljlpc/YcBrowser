@@ -83,7 +83,7 @@
 
 ### Linux
 
-从 [Releases](https://github.com/your-org/yc-browser/releases) 下载 `.deb`：
+从 [Releases](https://github.com/yljlpc/YcBrowser/releases) 下载 `.deb`：
 
 ```bash
 sudo apt install ./omnibrowser_<版本>_amd64.deb
