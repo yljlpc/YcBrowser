@@ -13,6 +13,11 @@
 !define INSTDIR "$PROGRAMFILES64\OmniBrowser"
 !define ICO "omnibrowser.ico"
 
+; 卸载注册表键名 / winget ProductCode。
+; 必须使用 ASCII：SignPath 要求产物元数据与项目名一致，winget 的
+; PackageIdentifier 也以 ASCII 段匹配 ARP 键，中文键名会导致两者都无法对齐。
+!define ARPKEY "YcBrowser"
+
 Name "${APPNAME} ${VERSION}"
 OutFile "YcBrowser-${VERSION}-setup.exe"
 InstallDir "${INSTDIR}"
@@ -27,7 +32,7 @@ RequestExecutionLevel admin
 ; Windows 的「属性 → 详细信息」面板与文件属性对话框读取的就是这里的值。
 ; ---------------------------------------------------------------------------
 VIProductVersion "${VERSION}.0"
-VIAddVersionKey /LANG=2052 "ProductName"     "${APPNAME}"
+VIAddVersionKey /LANG=2052 "ProductName"     "${ARPKEY}"
 VIAddVersionKey /LANG=2052 "ProductVersion"  "${VERSION}.0"
 VIAddVersionKey /LANG=2052 "FileDescription" "${APPNAME} 安装程序"
 VIAddVersionKey /LANG=2052 "FileVersion"     "${VERSION}.0"
@@ -55,13 +60,14 @@ Section "安装"
   ; 桌面快捷方式
   CreateShortcut "$DESKTOP\${APPNAME}.lnk" "$INSTDIR\OmniBrowser.exe" "" "$INSTDIR\OmniBrowser.exe" 0
 
-  ; 注册卸载信息
+  ; 注册卸载信息（ARP 键使用 ASCII 的 ${ARPKEY}，与 winget ProductCode 对齐）
   WriteUninstaller "$INSTDIR\uninstall.exe"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "DisplayName" "${APPNAME} ${VERSION}"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "UninstallString" "$INSTDIR\uninstall.exe"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "DisplayIcon" "$INSTDIR\OmniBrowser.exe"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "Publisher" "${PUBLISHER}"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "DisplayVersion" "${VERSION}"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${ARPKEY}" "DisplayName" "${APPNAME} ${VERSION}"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${ARPKEY}" "UninstallString" "$INSTDIR\uninstall.exe"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${ARPKEY}" "DisplayIcon" "$INSTDIR\OmniBrowser.exe"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${ARPKEY}" "Publisher" "${PUBLISHER}"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${ARPKEY}" "DisplayVersion" "${VERSION}"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${ARPKEY}" "InstallLocation" "$INSTDIR"
 SectionEnd
 
 Section "Uninstall"
@@ -69,5 +75,5 @@ Section "Uninstall"
   Delete "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk"
   RMDir "$SMPROGRAMS\${APPNAME}"
   Delete "$DESKTOP\${APPNAME}.lnk"
-  DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}"
+  DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${ARPKEY}"
 SectionEnd
