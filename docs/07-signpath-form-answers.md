@@ -77,9 +77,14 @@ Evidence of quality and transparency that does exist today:
 - Automated tests run in CI: Rust unit tests for the native core, plus pure-logic
   Python tests for translation segmentation, settings, bookmarks and UI geometry
 - A written privacy policy, a written code signing policy, and documented known
-  boundaries in the README
+  boundaries in the README (available in both Chinese and English)
 - The Windows installer is verified for runtime completeness (Qt plugins, WebEngine
   resources, PE dependency closure) by an automated bundle verification script
+- The `main` branch is protected: changes land through pull requests and must pass
+  the CI check, so build scripts and CI configuration are reviewed source
+- A manifest for the official Windows Package Manager (winget) has been submitted to
+  microsoft/winget-pkgs (pull request #479246), giving the project a first
+  distribution channel beyond GitHub Releases
 ```
 
 ---

@@ -108,6 +108,12 @@ Download `YcBrowser-<version>-setup.exe` from
 [Releases](https://github.com/yljlpc/YcBrowser/releases), or run `OmniBrowser.exe`
 from the portable folder.
 
+You can also install it with **winget**, the official Windows package manager:
+
+```powershell
+winget install --id YcBrowser.YcBrowser
+```
+
 > **Fully self-contained.** The installer bundles the complete Qt 6 runtime
 > (platform plugins, WebEngine renderer process and resources, ICU data, V8
 > snapshots), a Python runtime, the VC++ runtime, Chinese fonts and the Rust

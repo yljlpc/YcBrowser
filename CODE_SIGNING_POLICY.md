@@ -29,8 +29,17 @@
 - **不使用任何跨构建的产物缓存**：每次发布都从源码重新编译 Rust 核心并重新
   打包，保证二进制与该 tag 对应的源码一一对应。
 - 构建配置全部来自源码控制中的文件，不依赖 CI 界面的临时覆盖。
+- **`main` 分支受保护**：变更必须经由 PR 合并，且需通过
+  `Build Windows installer` 状态检查；禁止 force push 与删除分支。
+  构建脚本与 CI 配置属于受评审的源码范围（SignPath 明确要求）。
 - 每次发布前执行 `python tools/verify_bundle.py dist/OmniBrowser`，
   静态核对 Qt 运行时、WebEngine 资源与依赖闭包是否齐备。
+- 每个 Release 附带安装包的 **SHA-256 校验和**，用户可核验下载完整性。
+- 官方分发渠道：
+  - GitHub Releases —— <https://github.com/yljlpc/YcBrowser/releases>
+  - winget（微软官方包管理器）—— 收录 PR：
+    <https://github.com/microsoft/winget-pkgs/pull/479246>
+    安装命令：`winget install --id YcBrowser.YcBrowser`
 
 ## 审批流程
 

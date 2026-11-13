@@ -100,6 +100,12 @@ sudo apt install ./omnibrowser_<版本>_amd64.deb
 
 下载 `YcBrowser-<版本>-setup.exe` 安装，或直接运行便携目录中的 `OmniBrowser.exe`。
 
+也可以用 **winget**（微软官方包管理器）安装：
+
+```powershell
+winget install --id YcBrowser.YcBrowser
+```
+
 > **完全独立**：安装包自带 Qt 6 全部运行时（平台插件、WebEngine 渲染进程与
 > 资源包、ICU 数据、V8 快照）、Python 运行时、VC++ 运行库、中文字体与
 > Rust 原生核心。目标机器**无需预装任何软件或环境**，也不会写入系统目录
