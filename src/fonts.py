@@ -51,17 +51,19 @@ def _font_search_dirs():
     if meipass:
         pkg = os.path.join(meipass, "fonts")
 
-    if sys.platform == "win32":
-        # Windows：优先用随包字体目录，回退到系统字体目录。
-        sysroot = os.environ.get("SystemRoot", r"C:\Windows")
-        dirs = [pkg, os.path.join(sysroot, "Fonts")]
-    else:
-        # Linux（openKylin / deepin 等）：随包字体 + 常见桌面字体目录回退。
-        dirs = [
-            pkg,
-            os.path.expanduser("~/桌面/fonts"),
-            os.path.expanduser("~/Desktop/fonts"),
-        ]
+    # 只注册「需要显式注册」的字体目录：
+    #   - 随包分发的字体（不在系统字体目录，必须显式注册）
+    #   - 用户自备字体目录（开发期放在桌面 fonts/ 下）
+    #
+    # **刻意不扫描 C:\Windows\Fonts**：系统字体本来就由 Windows 全局提供，
+    # 浏览器与 Qt 都能直接使用；而逐个调用 QFontDatabase.addApplicationFont()
+    # 解析那 300+ 个系统字体文件（合计约 470 MB）会让启动多花 1~3 秒，
+    # 是启动慢的头号原因。系统字体无需注册。
+    user_dirs = [
+        os.path.expanduser("~/桌面/fonts"),
+        os.path.expanduser("~/Desktop/fonts"),
+    ]
+    dirs = [pkg] + user_dirs
     out = []
     for d in dirs:
         d = os.path.normpath(d)
@@ -70,10 +72,18 @@ def _font_search_dirs():
     return out
 
 
-def register_fonts():
-    """注册字体目录下所有字体文件，返回已注册字族列表（幂等）。"""
+def register_fonts(verbose=False):
+    """注册字体目录下所有字体文件，返回已注册字族列表（幂等）。
+
+    只处理「随包字体 + 用户自备字体目录」，不触碰系统字体目录 —— 详见
+    _font_search_dirs 的说明。
+    """
     if _REGISTERED:
         return list(_REGISTERED)
+    import time
+
+    t0 = time.perf_counter()
+    count = 0
     for d in _font_search_dirs():
         if not os.path.isdir(d):
             continue
@@ -82,6 +92,11 @@ def register_fonts():
                 fid = QFontDatabase.addApplicationFont(path)
                 if fid >= 0:
                     _REGISTERED.extend(QFontDatabase.applicationFontFamilies(fid))
+                count += 1
+    if verbose:
+        dt = (time.perf_counter() - t0) * 1000
+        print(f"[fonts] 注册 {count} 个字体文件，耗时 {dt:.0f} ms，"
+              f"字族 {len(set(_REGISTERED))} 个")
     return list(_REGISTERED)
 
 

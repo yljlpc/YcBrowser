@@ -10,6 +10,7 @@ PyQt6 约束：QPainter 的 drawLine/drawRect/drawEllipse/drawArc 只接受整�
 因此所有绘制坐标统一在内部用 int() 截断（图标为像素级，截断无损）。
 """
 import math
+from functools import lru_cache
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPen, QPixmap, QPainterPath
@@ -252,8 +253,13 @@ def win_icon_size():
     return 32
 
 
+@lru_cache(maxsize=8)
 def make_logo(size=64):
-    """Yc 品牌徽标：圆角方块 + Yc 字样（高清渲染）。"""
+    """Yc 品牌徽标：圆角方块 + Yc 字样（高清渲染）。
+
+    带缓存：窗口图标与主窗口图标是同一个徽标，重复绘制会白白多做一次
+    高分辨率离屏渲染（启动路径上）。
+    """
     dpr = _dpr()
     px = QPixmap(max(1, int(size * dpr)), max(1, int(size * dpr)))
     px.fill(Qt.GlobalColor.transparent)
