@@ -5,6 +5,7 @@
 /installer/*.exe
 /installer/*.pfx
 /installer/omnibrowser.ico
+/installer/_version_info.txt   # 构建时按 src/version.py 自动生成
 
 # package/ 下混有构建脚本与产物：只排除产物，保留 build_debs.sh（Linux 侧构建入口）
 /package/*
