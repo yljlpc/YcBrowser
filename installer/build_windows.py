@@ -421,7 +421,7 @@ def trim_payload(dist):
     print("\n=== 裁剪 Qt6 运行时载荷 ===")
     before_files = sum(len(f) for _, _, f in os.walk(dist))
     try:
-        keep, removed, freed = trim_qt_payload.apply_trim(dist)
+        keep, removed, freed, staging = trim_qt_payload.apply_trim(dist)
     except Exception as exc:  # noqa: BLE001
         print("!" * 66)
         print(f"!! 裁剪失败（不影响构建，但安装包会明显变大）：{exc}")
@@ -441,8 +441,12 @@ def trim_payload(dist):
 
     problems = trim_qt_payload.verify_tree(dist)
     if problems:
+        # 校验没过说明裁掉了必需件 —— 立刻回滚，绝不带着残缺的产物去打包。
+        # 裁剪用的是搬迁而非删除，所以回滚是可行的。
         print("!" * 66)
-        print("!! 裁剪后有依赖未能解析（详见上方清单）")
+        print("!! 裁剪后有依赖未能解析，正在回滚到完整载荷")
+        restored = trim_qt_payload.restore_trim(dist, staging)
+        print(f"!! 已回滚 {restored} 个文件")
         print("!! 若这些依赖确实必需，请补进 tools/trim_qt_payload.py 的保留名单后重建。")
         print("!" * 66)
         return False

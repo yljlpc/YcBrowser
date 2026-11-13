@@ -454,39 +454,71 @@ def analyze(dist):
             continue
         keep.append(rel)
 
-    # 5) 剔除「注定加载不了」的插件
+    # 5) 依赖自修复：迭代到「每个保留的 PE 的依赖都能满足」为止
     #
-    # 有些插件静态依赖的 DLL 根本没进过产物（PyInstaller 早就警告过
-    # "Library not found: could not resolve 'Qt63DRender.dll'"）：
-    #     plugins/renderers/openglrenderer.dll → Qt63DRender.dll / Qt63DCore.dll
-    #     plugins/imageformats/qpdf.dll        → Qt6Pdf.dll
-    # 这些插件留着只会让自检报未解析依赖，装上去也只会加载失败，
-    # 直接剔除 —— 这也让 verify_tree 保持「零未解析依赖」这一硬指标。
+    # 这一步取代了「先裁后验」的做法。剪完再验有个致命问题：
+    # 校验失败时文件已经被移走，安装包就缺件了。这里改成**先算后动**：
+    # 在不动任何文件的前提下，把保留集合修到自洽为止。
+    #
+    #   - 依赖的 DLL 在产物里存在 → 把它加回保留集合（自修复）
+    #   - 依赖的 DLL 根本不在产物里 → 这个 PE 注定加载不了，剔除它
+    #     （例如 qpdf.dll 缺 Qt6Pdf.dll、renderers/* 缺 Qt63DRender.dll，
+    #      这些 DLL 从来没进过产物，PyInstaller 早就警告过）
     sysnames = _system_dll_names()
-    shipped = {os.path.basename(r).lower() for r in keep}
-    unresolvable = []
-    for rel in list(keep):
-        if not rel.startswith(f"{qt_root}/plugins/") or not _is_pe(rel):
-            continue
-        normal, delay = parse_imports(files[rel])
-        missing = [d for d in set(normal + delay)
-                   if d.lower() not in shipped and d.lower() not in sysnames
-                   and not d.lower().startswith(("api-ms-win-", "ext-ms-"))]
-        if missing:
-            unresolvable.append((rel, missing))
-    if unresolvable:
-        for rel, missing in unresolvable:
-            print(f"⚠️ 剔除无法加载的插件：{os.path.basename(rel)} "
-                  f"（缺 {', '.join(missing)}）")
-            keep.remove(rel)
-            drop.append(rel)
+    keep_set = set(keep)
+    for _round in range(12):
+        shipped = {os.path.basename(r).lower() for r in keep_set}
+        changed = False
+        unusable = []
+        for rel in sorted(keep_set):
+            if not _is_pe(rel):
+                continue
+            normal, delay = parse_imports(files[rel])
+            missing_present = []
+            missing_absent = []
+            for d in set(normal + delay):
+                low = d.lower()
+                if low in shipped or low in sysnames:
+                    continue
+                if low.startswith(("api-ms-win-", "ext-ms-")):
+                    continue
+                dep_rel = by_name.get(low)
+                if dep_rel and not rel.startswith(f"{qt_root}/qml/"):
+                    # 只从 bin / plugins 里补，避免把 qml/ 整棵又拉回来
+                    if dep_rel.startswith((f"{qt_root}/bin/", f"{qt_root}/plugins/")):
+                        missing_present.append(dep_rel)
+                    else:
+                        missing_absent.append(d)
+                else:
+                    missing_absent.append(d)
+            if missing_present:
+                for m in missing_present:
+                    if m not in keep_set:
+                        keep_set.add(m)
+                        changed = True
+            elif missing_absent:
+                unusable.append((rel, missing_absent))
+        for rel, missing in unusable:
+            if rel in keep_set:
+                keep_set.discard(rel)
+                changed = True
+                print(f"⚠️ 剔除无法加载的插件：{os.path.basename(rel)} "
+                      f"（缺 {', '.join(missing)}）")
+        if not changed:
+            break
+
+    final_keep = []
+    final_drop = []
+    for rel in files:
+        (final_keep if rel in keep_set else final_drop).append(rel)
+    keep, drop = final_keep, final_drop
 
     # 6) 剔除「只为死插件而拉进来」的 DLL
     #
     # 上一步把坏插件删掉后，它独占的依赖（典型如 Qt6ShaderTools.dll
     # 只有 rhirenderer.dll 需要）就成了纯冗余。按存活插件重算一次闭包，
     # 把这类 DLL 一并去掉。
-    alive_seeds = [rel for rel in seeds if rel in keep]
+    alive_seeds = [rel for rel in seeds if rel in keep_set]
     alive_closure = _expand_closure(files, by_name, alive_seeds)
     for rel in list(keep):
         if not rel.startswith(f"{qt_root}/bin/") or not _is_pe(rel):
@@ -550,26 +582,51 @@ def _plan_moves(dist, drop, files):
     return moves
 
 
+def restore_trim(dist, staging):
+    """把隔离区里的内容搬回产物目录 —— 裁剪后校验失败时的回滚。
+
+    因为裁剪用的是「搬迁」而不是「删除」，回滚是可行的：
+    把隔离区里的文件按相对路径原样搬回即可。
+    """
+    if not staging or not os.path.isdir(staging):
+        return 0
+    n = 0
+    for dp, _dn, fns in os.walk(staging):
+        for fn in fns:
+            s = os.path.join(dp, fn)
+            d = os.path.join(dist, os.path.relpath(s, staging))
+            if os.path.exists(d):
+                continue
+            os.makedirs(os.path.dirname(d), exist_ok=True)
+            try:
+                shutil.move(s, d)
+                n += 1
+            except (OSError, shutil.Error):
+                pass
+    return n
+
+
 def apply_trim(dist, dry_run=False, staging=None, purge=False):
-    """执行裁剪，返回 (保留文件数, 移除文件数, 释放字节数)。
+    """执行裁剪，返回 (保留文件数, 移除文件数, 释放字节数, 隔离区路径)。
 
     供 installer/build_windows.py 在「PyInstaller 打包完成 → 签名 → 打安装包」
-    这条链路中间调用。顺序很关键：必须先删再签，否则被删的文件会白跑一遍
+    这条链路中间调用。顺序很关键：必须先裁再签，否则被裁的文件会白跑一遍
     签名流程（签名 200+ 个 DLL 本身就要好几分钟）。
 
     默认用**隔离搬迁**（把不要的文件 rename 到 staging 目录）而不是 unlink：
-    既快（几千个文件一次 rename），又可回溯，同时避免触发批量删除保护。
-    purge=True 时改为直接删除。
+    既快（几千个文件一次 rename），又可回溯、可回滚，
+    同时避免触发批量删除保护。purge=True 时改为直接删除。
     """
     keep, drop, needed, files, qt_root = analyze(dist)
     keep_bytes, drop_bytes = summarize(keep, drop, files)
 
     if dry_run:
-        return len(keep), len(drop), drop_bytes
+        return len(keep), len(drop), drop_bytes, None
 
     moves = _plan_moves(dist, drop, files)
     removed = 0
     freed = 0
+    used_staging = None
 
     if purge:
         for src, rel in moves:
@@ -595,11 +652,11 @@ def apply_trim(dist, dry_run=False, staging=None, purge=False):
             removed += 1
     else:
         import time as _time
-        staging = staging or os.path.join(
+        used_staging = staging or os.path.join(
             os.path.dirname(os.path.abspath(dist)),
             "_trimmed_out-%d" % int(_time.time()))
         for src, rel in moves:
-            dest = os.path.join(staging, rel)
+            dest = os.path.join(used_staging, rel)
             try:
                 os.makedirs(os.path.dirname(dest), exist_ok=True)
                 if os.path.isdir(src):
@@ -612,7 +669,7 @@ def apply_trim(dist, dry_run=False, staging=None, purge=False):
                 removed += 1
             except (OSError, shutil.Error) as exc:
                 print(f"⚠️ 搬迁失败 {rel}: {exc}")
-        print(f"   被裁剪的内容已隔离到：{staging}")
+        print(f"   被裁剪的内容已隔离到：{used_staging}")
 
     # 清理产物内变空的目录
     for root_dir, dirs, sub_files in os.walk(dist, topdown=False):
@@ -623,7 +680,7 @@ def apply_trim(dist, dry_run=False, staging=None, purge=False):
                 pass
 
     print(f"✅ 已移除 {removed} 项，释放 {freed/1048576:.1f} MB")
-    return len(keep), removed, freed
+    return len(keep), removed, freed, used_staging
 
 
 def main():
@@ -694,7 +751,7 @@ def main():
         return 0
 
     # 实际执行
-    _, removed, freed = apply_trim(dist, purge=args.purge)
+    _, removed, freed, _staging = apply_trim(dist, purge=args.purge)
     print(f"✅ 已移除 {removed} 项，释放 {freed/1048576:.1f} MB")
     return 0
 
