@@ -1,11 +1,14 @@
 # 构建产物
 /dist/
 /build/
-/package/
 *.spec
 /installer/*.exe
 /installer/*.pfx
 /installer/omnibrowser.ico
+
+# package/ 下混有构建脚本与产物：只排除产物，保留 build_debs.sh（Linux 侧构建入口）
+/package/*
+!/package/build_debs.sh
 
 # WorkBuddy 本地数据（非项目内容）
 /.workbuddy/
