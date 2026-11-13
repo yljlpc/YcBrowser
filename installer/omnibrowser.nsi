@@ -8,7 +8,7 @@
 ; 注意：本目录下的 omnibrowser.ico 由 build_windows.py 自动从 assets/ 复制而来。
 
 !define APPNAME "Yc浏览器"
-!define VERSION "1.1.13"
+!define VERSION "1.1.14"
 !define PUBLISHER "Yc"
 !define INSTDIR "$PROGRAMFILES64\OmniBrowser"
 !define ICO "omnibrowser.ico"
@@ -27,16 +27,30 @@ RequestExecutionLevel admin
 ; 压缩算法
 ;
 ; 安装耗时 = 解压耗时 + 写盘耗时 + Defender 对每个新写入文件的实时扫描。
-; 载荷瘦身后（2788 → 142 个文件）写盘与扫描成本已大幅下降，
-; 解压成为主要瓶颈，因此选用 **solid LZMA**：
-;   - /SOLID 把整个包压成一个连续数据块，比逐文件 LZMA 压缩率高 10~15%，
-;     同样体积下安装包更小（下载更快）；
-;   - NSIS 3.x 对 solid LZMA 采用**多线程并行解压**，多核机器上解压吞吐
-;     远高于单文件 LZMA；
-;   - 相比 zlib 体积小得多，抵消了 zlib 那点解压速度优势 ——
-;     实测 zlib 的安装包会从约 120 MB 涨到 210 MB，下载时间反而更长。
+; 载荷瘦身后（2788 → 134 个文件）写盘与扫描成本已大幅下降，
+; **解压成为绝对瓶颈**，因此压缩算法必须以解压速度优先。
+;
+; 曾经这里用 /SOLID lzma，注释称"NSIS 3.x 对 solid LZMA 多线程并行解压"。
+; 该假设经实测**证伪**（见 tools/cmp_compressor.py，四轮交叉对照，
+; 同一份产物只改压缩算法）：
+;
+;   算法          体积        安装耗时(4 轮平均)
+;   zlib          165.1 MB    4.38 s
+;   lzma          125.9 MB   15.74 s
+;   solid lzma   123.9 MB   17.40 s
+;
+; LZMA 解压比 zlib 慢 3~4 倍，且优势随载荷缩小而更加明显
+; （文件少 → 解压占比高 → 差距放大）。bzip2 更慢（20.6 s），
+; zlib + SetDatablockOptimize 与 zlib 无差异（体积完全相同）。
+;
+; 体积换时间的账：zlib 比 solid lzma 大 41 MB，但在 80 Mbps 有效带宽下
+; 只多花约 4 s 下载；换来的安装加速是 12.7 s —— **净收益约 9 s**，
+; 且用户等待的是"装完"的瞬间，而不是"下载完"的瞬间。
+; 带宽越慢、越接近本地磁盘安装，zlib 的优势越大。
+;
+; 结论：坚持 zlib。体积不是安装体验的关键指标。
 ; ---------------------------------------------------------------------------
-SetCompressor /SOLID lzma
+SetCompressor zlib
 SetDatablockOptimize on
 
 ; ---------------------------------------------------------------------------

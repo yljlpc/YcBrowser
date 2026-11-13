@@ -226,6 +226,12 @@ def main():
         help="只构建便携程序，不生成 NSIS 安装包"
     )
     parser.add_argument(
+        "--skip-build",
+        action="store_true",
+        help="跳过 PyInstaller 打包，直接用现有 dist/OmniBrowser 重新生成安装包"
+             "（改 NSIS 脚本参数后想快速重打包时用）"
+    )
+    parser.add_argument(
         "--sign",
         action="store_true",
         help="对安装包执行 Authenticode 签名"
@@ -280,14 +286,24 @@ def main():
     # PyInstaller 的 --noconfirm 会自行覆盖/重建 COLLECT 目录，
     # 这里只把确实过期的旧目录改名归档（.old-<时间戳>），避免硬删除。
     dist = os.path.join(ROOT, "dist", "OmniBrowser")
-    if os.path.isdir(dist):
-        import time
-        stale = os.path.join(ROOT, "dist", "OmniBrowser.old-%d" % int(time.time()))
-        try:
-            os.rename(dist, stale)
-            print("旧产物已重命名归档：", stale)
-        except OSError as exc:
-            print(f"⚠️ 无法归档旧产物目录（{exc}），将直接覆盖构建")
+
+    if args.skip_build:
+        # 只重打安装包：复用现有 dist/OmniBrowser，跳过 PyInstaller。
+        # 用途：改完 NSIS 脚本参数（压缩算法、卸载逻辑等）后快速验证/发布。
+        if not os.path.isdir(dist):
+            print(f"❌ --skip-build 需要已存在的产物目录，但找不到：{dist}")
+            return 1
+        n = sum(len(f) for _, _, f in os.walk(dist))
+        print(f"==> 跳过 PyInstaller，复用现有产物：{dist}（{n} 个文件）")
+    else:
+        if os.path.isdir(dist):
+            import time
+            stale = os.path.join(ROOT, "dist", "OmniBrowser.old-%d" % int(time.time()))
+            try:
+                os.rename(dist, stale)
+                print("旧产物已重命名归档：", stale)
+            except OSError as exc:
+                print(f"⚠️ 无法归档旧产物目录（{exc}），将直接覆盖构建")
 
     font_dir = _find_font_dir()
     if font_dir:
@@ -296,90 +312,95 @@ def main():
         print("警告：未找到中文字体目录，将不随包分发字体"
               "（Windows 自带中文字体，界面可正常显示）")
 
-    cmd = [
-        sys.executable, "-m", "PyInstaller",
-        "--name", "OmniBrowser",
-        "--windowed",
-        "--icon", ICO,
-        "--paths", SRC,
-        "--add-binary", f"{CORE_EXE};.",
-        "--hidden-import", "PyQt6.QtCore",
-        "--hidden-import", "PyQt6.QtGui",
-        "--hidden-import", "PyQt6.QtWidgets",
-        "--hidden-import", "PyQt6.QtPrintSupport",
-        "--hidden-import", "PyQt6.QtWebEngineCore",
-        "--hidden-import", "PyQt6.QtWebEngineWidgets",
-        "--hidden-import", "PyQt6.sip",
-        "--noconfirm",
-        entry,
-    ]
+    if not args.skip_build:
+        cmd = [
+            sys.executable, "-m", "PyInstaller",
+            "--name", "OmniBrowser",
+            "--windowed",
+            "--icon", ICO,
+            "--paths", SRC,
+            "--add-binary", f"{CORE_EXE};.",
+            "--hidden-import", "PyQt6.QtCore",
+            "--hidden-import", "PyQt6.QtGui",
+            "--hidden-import", "PyQt6.QtWidgets",
+            "--hidden-import", "PyQt6.QtPrintSupport",
+            "--hidden-import", "PyQt6.QtWebEngineCore",
+            "--hidden-import", "PyQt6.QtWebEngineWidgets",
+            "--hidden-import", "PyQt6.sip",
+            "--noconfirm",
+            entry,
+        ]
 
-    # 运行时钩子：显式设置 QT_PLUGIN_PATH 等环境变量，
-    # 让 Qt 能找到平台插件、webengine 进程与资源包。
-    # PyInstaller 自带 hook 会做这件事，但它在启用应用控制策略的机器上
-    # 会被整体跳过，因此这里自带一份。
-    hook = os.path.join(ROOT, "installer", "_qt_runtime_hook.py")
-    if os.path.isfile(hook):
-        cmd += ["--runtime-hook", hook]
-        print("✓ 使用运行时钩子：", hook)
+        # 运行时钩子：显式设置 QT_PLUGIN_PATH 等环境变量，
+        # 让 Qt 能找到平台插件、webengine 进程与资源包。
+        # PyInstaller 自带 hook 会做这件事，但它在启用应用控制策略的机器上
+        # 会被整体跳过，因此这里自带一份。
+        hook = os.path.join(ROOT, "installer", "_qt_runtime_hook.py")
+        if os.path.isfile(hook):
+            cmd += ["--runtime-hook", hook]
+            print("✓ 使用运行时钩子：", hook)
 
-    # 版本资源：保证便携版主程序与安装包的元数据一致
-    try:
-        ver_file = _write_version_file(VERSION)
-        cmd += ["--version-file", ver_file]
-        print("✓ 版本资源：", ver_file)
-    except Exception as exc:
-        print("⚠️ 生成版本资源失败（不影响打包）：", exc)
-    if font_dir:
-        cmd += ["--add-data", f"{font_dir};fonts"]
+        # 版本资源：保证便携版主程序与安装包的元数据一致
+        try:
+            ver_file = _write_version_file(VERSION)
+            cmd += ["--version-file", ver_file]
+            print("✓ 版本资源：", ver_file)
+        except Exception as exc:
+            print("⚠️ 生成版本资源失败（不影响打包）：", exc)
+        if font_dir:
+            cmd += ["--add-data", f"{font_dir};fonts"]
 
-    # ---- Qt6 运行时资源（显式收集，不依赖 PyInstaller 的 hook）----
-    #
-    # 为什么必须显式收集：PyInstaller 的 hook-PyQt6.py 靠在隔离的子进程里
-    # import PyQt6.QtCore 来探测 Qt 安装路径。在启用了 Windows 应用控制
-    # 策略（WDAC/AppLocker）的机器上，这个 import 会被系统策略拦截
-    # （ImportError: DLL load failed ... 应用程序控制策略已阻止此文件），
-    # 导致 pyqt6_library_info.version 为 None，hook 整段被跳过。
-    # 后果是产物里没有 plugins/platforms/qwindows.dll，
-    # 双击即报 "no Qt platform plugin could be initialized"。
-    #
-    # 平台插件、WebEngine 子进程、资源包都是运行必需，因此在此逐项显式收集。
-    cmd += _qt_runtime_args()
+        # ---- Qt6 运行时资源（显式收集，不依赖 PyInstaller 的 hook）----
+        #
+        # 为什么必须显式收集：PyInstaller 的 hook-PyQt6.py 靠在隔离的子进程里
+        # import PyQt6.QtCore 来探测 Qt 安装路径。在启用了 Windows 应用控制
+        # 策略（WDAC/AppLocker）的机器上，这个 import 会被系统策略拦截
+        # （ImportError: DLL load failed ... 应用程序控制策略已阻止此文件），
+        # 导致 pyqt6_library_info.version 为 None，hook 整段被跳过。
+        # 后果是产物里没有 plugins/platforms/qwindows.dll，
+        # 双击即报 "no Qt platform plugin could be initialized"。
+        #
+        # 平台插件、WebEngine 子进程、资源包都是运行必需，因此在此逐项显式收集。
+        cmd += _qt_runtime_args()
 
-    run(cmd)
+        run(cmd)
 
-    print("\n完成：", dist)
-    print("版本：", VERSION)
+        print("\n完成：", dist)
+        print("版本：", VERSION)
 
-    # 3.5) 裁剪 Qt6 运行时载荷
-    #
-    # PyInstaller 的 hook 与「整目录收集」策略会把整个 Qt6 运行时塞进产物
-    # （bin 123 个 DLL / 2788 个文件 / 589 MB），而本应用只用到
-    # QtCore + QtGui + QtWidgets + QtPrintSupport + QtWebEngineCore +
-    # QtWebEngineWidgets 六个模块。
-    #
-    # 裁掉的绝大部分是：
-    #   - qml/ 整棵树（2329 个文件）—— 里面每个插件都依赖 PyInstaller
-    #     根本没收集的 Qt6 模块 DLL，本来就是坏的；本应用不用 QML；
-    #   - 5 个 *.debug.* 调试资源包（77 MB）—— DLL 字符串表里查无引用；
-    #   - 291 个非中英文的 .qm 翻译（54 MB）；
-    #   - QML / Quick3D / Designer / Multimedia / sql 驱动等无关插件与 DLL。
-    #
-    # 收益：文件数 2788 → 142，体积 589 MB → 365 MB。安装时逐文件写入、
-    # 逐文件被 Defender 实时扫描的成本随之大幅下降 —— 这是「安装很慢」
-    # 的主因。签名耗时也同步从 200+ 个文件降到 30+ 个。
-    #
-    # 必须排在签名之前：否则被删的文件会白跑一遍签名。
-    trim_payload(dist)
+        # 3.5) 裁剪 Qt6 运行时载荷
+        #
+        # PyInstaller 的 hook 与「整目录收集」策略会把整个 Qt6 运行时塞进产物
+        # （bin 123 个 DLL / 2788 个文件 / 589 MB），而本应用只用到
+        # QtCore + QtGui + QtWidgets + QtPrintSupport + QtWebEngineCore +
+        # QtWebEngineWidgets 六个模块。
+        #
+        # 裁掉的绝大部分是：
+        #   - qml/ 整棵树（2329 个文件）—— 里面每个插件都依赖 PyInstaller
+        #     根本没收集的 Qt6 模块 DLL，本来就是坏的；本应用不用 QML；
+        #   - 5 个 *.debug.* 调试资源包（77 MB）—— DLL 字符串表里查无引用；
+        #   - 291 个非中英文的 .qm 翻译（54 MB）；
+        #   - QML / Quick3D / Designer / Multimedia / sql 驱动等无关插件与 DLL。
+        #
+        # 收益：文件数 2788 → 134，体积 589 MB → 366 MB。
+        #
+        # 注意：这里曾把「文件数」当成安装慢的主因，实测证明并非如此 ——
+        # 端到端安装耗时的主导因素是 **NSIS 压缩算法的解压速度**，
+        # 而文件数减少的收益被 solid LZMA 慢 3~4 倍的解压完全抵消。
+        # 详见 installer/omnibrowser.nsi 的压缩算法说明与
+        # tools/cmp_compressor.py 的 A/B 实测。
+        #
+        # 必须排在签名之前：否则被删的文件会白跑一遍签名。
+        trim_payload(dist)
 
-    # 4) 签名产物树（.pyd / .dll / .exe）
-    #
-    # 这一步不是可有可无的装饰：PyInstaller 产物里的 Python 扩展模块
-    # （PyQt6 的 *.pyd）不带 Authenticode 签名，在启用了 Windows 应用
-    # 控制策略的机器上会被系统直接拦截，表现为
-    # "DLL load failed while importing QtCore: 应用程序控制策略已阻止此文件"。
-    # 因此先把整个产物树签好，再打安装包。
-    sign_tree(dist)
+        # 4) 签名产物树（.pyd / .dll / .exe）
+        #
+        # 这一步不是可有可无的装饰：PyInstaller 产物里的 Python 扩展模块
+        # （PyQt6 的 *.pyd）不带 Authenticode 签名，在启用了 Windows 应用
+        # 控制策略的机器上会被系统直接拦截，表现为
+        # "DLL load failed while importing QtCore: 应用程序控制策略已阻止此文件"。
+        # 因此先把整个产物树签好，再打安装包。
+        sign_tree(dist)
 
     # 5) 打成 NSIS 安装包
     if args.no_installer:

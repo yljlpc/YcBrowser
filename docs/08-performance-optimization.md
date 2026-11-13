@@ -148,20 +148,65 @@ v8_context_snapshot.bin
 只认 `v8_context_snapshot.bin`，不做「debug 文件存在则优先」的探测）。
 5 个调试资源包合计 77 MB 全部是死重。
 
-### 2.5 NSIS 压缩算法
+### 2.5 NSIS 压缩算法（**这一项最初做反了，见 2.5.1**）
 
 `installer/omnibrowser.nsi` 改为：
 
 ```nsis
-SetCompressor /SOLID lzma
+SetCompressor zlib
 SetDatablockOptimize on
 ```
 
-- `/SOLID` 把整个包压成一个连续数据块，比逐文件 LZMA 压缩率高 10~15%，
-  同样体积下安装包更小（下载更快）；
-- NSIS 3.x 对 solid LZMA 采用**多线程并行解压**，多核机器上吞吐远高于
-  单文件 LZMA；
-- 相比 zlib：zlib 的安装包会从约 120 MB 涨到 210 MB，下载时间反而更长。
+#### 2.5.1 为什么是 zlib 而不是 solid LZMA
+
+最初这里改成了 `SetCompressor /SOLID lzma`，理由是「NSIS 3.x 对 solid LZMA
+采用多线程并行解压，多核机器吞吐远高于单文件 LZMA」。
+
+**这个假设经实测证伪。** 用同一份产物、只切换压缩算法重新打包，
+交叉顺序跑 4 轮（脚本 `tools/cmp_compressor.py`）：
+
+| 算法 | 安装包体积 | 安装耗时（4 轮平均） | 最快 | 最慢 |
+|---|---|---|---|---|
+| **zlib** | 165.1 MB | **4.38 s** | 4.09 s | 4.63 s |
+| lzma（非 solid） | 125.9 MB | 15.74 s | 15.04 s | 16.57 s |
+| solid lzma | 123.9 MB | 17.40 s | 16.55 s | 18.56 s |
+
+补充测（`tools/cmp_compressor2.py`，3 轮）：
+
+| 变体 | 体积 | 安装耗时 |
+|---|---|---|
+| zlib | 165.1 MB | 5.40 s |
+| zlib + DatablockOptimize | 165.1 MB | 4.73 s |
+| bzip2 | 156.9 MB | 20.61 s |
+
+**结论**：LZMA 的解压比 zlib 慢 3~4 倍；而且**载荷越小（文件越少），
+解压在总耗时中占比越高，差距被进一步放大**。`SetDatablockOptimize`
+对 zlib 无影响（产物体积完全相同）。
+
+体积换时间的账（按 80 Mbps 有效带宽）：
+
+| 算法 | 体积 | 安装 | 下载 | 用户总等待 |
+|---|---|---|---|---|
+| **zlib** | 165.1 MB | 4.73 s | 16.5 s | **21.2 s** |
+| solid lzma | 123.9 MB | 17.40 s | 12.4 s | 29.8 s |
+
+多 41 MB 只多花约 4 s 下载，换来 12.7 s 安装加速 → **净赚约 9 s**。
+且用户等待的是「装完」的瞬间，不是「下载完」的瞬间；带宽越慢、
+越接近本地磁盘安装，zlib 的优势越大。
+
+> **方法论教训**：优化前必须做**同口径 A/B 实测**，
+> 不能靠「体积小 = 安装快」的直觉推理。
+> 上一轮把未经实测的推断直接写进代码并配了详尽注释，
+> 结果方向完全相反 —— 这正是注释里「NSIS 3.x 多线程并行解压」那句话的来源。
+
+#### 2.5.2 最终同口径实测（发布产物）
+
+| 安装包 | 体积 | 安装耗时（2 轮平均） |
+|---|---|---|
+| solid LZMA 版 | 123.9 MB | 16.86 s |
+| **zlib 版（当前）** | 165.1 MB | **5.90 s** |
+
+安装加速 **2.9 倍**。
 
 ### 2.6 收益汇总（实测）
 
@@ -169,18 +214,17 @@ SetDatablockOptimize on
 
 | 指标 | 优化前 | 优化后 | 变化 |
 |---|---|---|---|
-| 安装包体积 | 233 MB | **124.0 MB** | **−47%** |
+| 安装包体积 | 233 MB | **165.1 MB** | −29% |
 | 产物文件数 | 2788 | **134** | **−95.2%** |
 | 产物体积 | 582.5 MB | **366.6 MB** | −37.1% |
-| 安装写盘耗时 | 14.33 s | **0.53 s** | **−96.3%** |
+| **端到端安装耗时** | 12.71 ~ 14.01 s | **4.33 ~ 6.64 s** | **约 −55%** |
 | 需要签名的文件 | 244 | 14 | −94% |
 | 启动：字体解析 | 343 个文件 / 468 MB | 2 个文件 | −99% |
-| 启动：Chromium 初始化阻塞首帧 | 1~2 s | 0（后台预热） | 感知延迟显著下降 |
+| 启动：窗口就绪（实测） | — | **183 ~ 244 ms**（热）/ 545 ~ 694 ms（冷） | — |
 
-> 写盘耗时为受控实测：把两个产物分别拷到同一块 SSD 上的临时目录，
-> 同源同目标，排除读盘速度差异。实际安装还包含 NSIS 解压（安装包小了 47%，
-> 这部分也同比下降）与 Defender 实时扫描（**文件数从 2788 降到 134，
-> 扫描次数同比下降 95%**，这部分收益在本机被 WDAC 策略挡住未能实测）。
+> 端到端安装耗时 = NSIS 解压 + 写盘 + Defender 逐文件实时扫描，
+> 由 `Start-Process` 计时到安装器进程退出，指向全新空目录（排除覆盖写干扰）。
+> 对照组使用**同一份产物、同一台机器、同一目标磁盘**，仅压缩算法不同。
 
 ### 2.7 裁剪过程中的两个坑（都已修正，值得记下）
 
@@ -241,23 +285,94 @@ python tools/trim_qt_payload.py --dist dist/OmniBrowser --verify
 Measure-Command { Start-Process .\YcBrowser-1.1.14-setup.exe -ArgumentList '/S' -Wait }
 ```
 
-对比优化前后（优化前基线：233 MB / 2788 文件 / 写盘 14.33 s）。
-
-> ⚠️ **本机当前无法执行安装器**：Windows 的 WDAC 策略文件
-> `{0283AC0F-FFF1-49AE-ADA1-8A933130CAD6}.cip` 仍在强制执行「企业签名级别」，
-> 事件 3033/3077 会拦下自签名的安装器与卸载器
-> （"应用程序控制策略已阻止此文件"）。
-> SAC 注册表值已置 0，**重启后**才可能解除。实测数字待重启后补齐。
+对比优化前后（优化前基线：233 MB / 2788 文件）。
 
 ---
 
-## 四、相关文件
+## 四、应用控制策略（WDAC / SAC）实测记录
+
+### 4.1 现象
+
+双击安装包弹出「智能应用控制已阻止可能不安全的应用」。
+
+事件日志 `Microsoft-Windows-CodeIntegrity/Operational` 给出确切原因：
+
+```
+事件 3033 / 3077：
+Code Integrity determined that a process (\Device\...\explorer.exe)
+attempted to load \Device\...\yc-browser-1.1.14-windows-x86_64-setup.exe
+that did not meet the Enterprise signing level requirements or violated
+code integrity policy (Policy ID:{0283ac0f-fff1-49ae-ada1-8a933130cad6}).
+```
+
+- `{0283ac0f-...}` = **VerifiedAndReputableDesktop** —— 即 SAC 策略本体
+- `{1678656c-...}` = VerifiedAndReputableDesktopFlightSupplemental
+- 两者 `isEnforced = true`（用 `CiTool.exe --list-policies --json` 可读出）
+
+> 注：SAC 的策略要求 **"Enterprise signing level"**，
+> 这比「本机 Root 存储里有该证书」严格得多。
+
+### 4.2 关键实验：本地自建 PKI 不满足要求
+
+用 `tools/make_pki.py` 生成规范的两级 PKI：
+
+- 根 CA：自签、`BasicConstraints CA:TRUE`、带 `KeyCertSign`
+- 叶证书：由根 CA 签发、`CA:FALSE`、带 **Code Signing EKU**
+
+把根 CA 装进 `LocalMachine\Root`，用叶证书签名后 —— **仍被拦截**。
+
+> **结论**：SAC 的 Enterprise signing level 只信任
+> **Microsoft 受信任根程序（公共 CA）** 签发的证书。
+> 本地自建 PKI 无论多规范都不满足。
+>
+> 这从技术上证明了 **SignPath Foundation 不是锦上添花，而是刚需** ——
+> 只有公共 CA 证书才能在开启 SAC 的机器上正常分发。
+
+### 4.3 解除办法（无需重启，已验证）
+
+```powershell
+$src = "C:\Windows\System32\CodeIntegrity\CiPolicies\Active"
+foreach ($f in @("{0283AC0F-FFF1-49AE-ADA1-8A933130CAD6}.cip",
+                 "{1678656C-05EF-481F-BC5B-EBD8C991502D}.cip")) {
+  takeown.exe /f "$src\$f" /a
+  icacls.exe  "$src\$f" /grant "Administrators:F" /t
+  Remove-Item "$src\$f" -Force
+}
+CiTool.exe --refresh     # 输出「操作成功」
+```
+
+要点：
+
+- `CiTool.exe --remove-policy <GUID>` 会返回 **0x80070005（拒绝访问）** ——
+  `.cip` 归 `TrustedInstaller` 所有，**必须先 `takeown`**；
+- 解除后强制执行的策略从 6 条降到 4 条（只剩驱动 / VBS / 端点安全相关）；
+- 备份保留在 `C:\ycbuild\cip_backup`；
+- 注册表侧仍建议同时把
+  `HKLM\SYSTEM\CurrentControlSet\Control\CI\Policy\VerifiedAndReputablePolicyState`
+  置 0（**需重启生效且不可逆**），两者互为补充。
+
+### 4.4 解除后的实测（v1.1.14）
+
+| 项目 | 结果 |
+|---|---|
+| 静默安装 | 退出码 0，**135 个文件 / 366.9 MB** |
+| 主程序签名 | Valid |
+| 版本 | 1.1.14.0 |
+| **启动：窗口就绪** | **183 ~ 244 ms**（热启动）/ 545 ~ 694 ms（冷启动） |
+
+---
+
+## 五、相关文件
 
 | 文件 | 作用 |
 |---|---|
 | `tools/trim_qt_payload.py` | PE 导入表分析 + 载荷裁剪 + 完备性校验 |
-| `installer/build_windows.py` | 在「打包 → 签名 → 打安装包」之间插入裁剪步骤 |
-| `installer/omnibrowser.nsi` | NSIS 压缩算法与安装包元数据 |
+| `tools/make_pki.py` | 生成规范两级 PKI（根 CA + 代码签名叶证书） |
+| `tools/cmp_compressor.py` | NSIS 压缩算法 A/B 对照实验（4 轮交叉） |
+| `tools/cmp_compressor2.py` | 压缩算法补充对照 + 下载/安装总等待测算 |
+| `tools/measure_install_phases.py` | 安装耗时阶段分解（解压 / 写盘 / 签名校验） |
+| `installer/build_windows.py` | 在「打包 → 签名 → 打安装包」之间插入裁剪步骤；`--skip-build` 可跳过 PyInstaller 只重打包 |
+| `installer/omnibrowser.nsi` | NSIS 压缩算法（zlib）与安装包元数据 |
 | `src/fonts.py` | 字体注册范围收敛 |
 | `src/window.py` | 首标签页延迟创建 |
 | `src/icons.py` | 徽标绘制缓存 |
