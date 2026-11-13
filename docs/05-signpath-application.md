@@ -36,7 +36,7 @@ SignPath Foundation 的官方资格要求：
 - [x] **OSI 认可的开源许可证**（不允许双许可）→ 本项目用 **MIT** ✅ 已就绪
 - [x] **无恶意软件 / 无潜在不受欢迎程序** ✅
 - [x] **项目仍在积极维护** ✅
-- [x] **已有至少一个已发布版本**（以可签名的形式）→ v1.1.13 Release 已发布
+- [x] **已有至少一个已发布版本**（以可签名的形式）→ v1.1.14 Release 已发布（<https://github.com/yljlpc/YcBrowser/releases/tag/v1.1.14>）
       <https://github.com/yljlpc/YcBrowser/releases> ✅
 - [x] **下载页有功能说明** → 已建 [README.md](../README.md)（中英双版本）✅
 - [x] **GitHub 仓库公开** → <https://github.com/yljlpc/YcBrowser> ✅ 已完成
@@ -68,7 +68,7 @@ https://github.com/yljlpc/YcBrowser
 ```
 
 - 分支：`main`（8+ 次提交，含完整构建链路与签名策略）
-- 标签：`v1.1.13`（指向 `3ccd08d`）
+- 标签：`v1.1.14`（指向 `c13099c`，含启动与安装性能优化）
 - 工作区干净，无构建产物入库
 
 ### 步骤 2：清理不应入库的产物 ✅ 已完成
@@ -102,14 +102,14 @@ https://github.com/yljlpc/YcBrowser
 | 外部贡献者 | 非作者本人提交的 PR / Issue | ⬜ 无 |
 | 独立第三方讨论 | 非作者撰写的文章、Reddit / Stack Overflow / 社区帖子 | ⬜ 无 |
 | 机构或组织背书 | 被某个开源组织收录、赞助、推荐 | ⬜ 无 |
-| 持续活跃 | 多个版本、规律更新、Issue 有响应 | ✅ v1.1.13，CI 持续构建 |
+| 持续活跃 | 多个版本、规律更新、Issue 有响应 | ✅ v1.1.13 / v1.1.14，CI 持续构建 |
 | 发行渠道分发 | 被 winget / Chocolatey 等官方仓库收录 | ✅ winget 收录 PR 已提交（microsoft/winget-pkgs#479246，待维护者合并） |
 
 **申请前能立刻做的（不需要等用户量）**：
 
 1. **提交 winget manifest** ✅ **已完成** —— PR 已提交至
    <https://github.com/microsoft/winget-pkgs/pull/479246>。
-   清单文件在仓库 `winget/manifests/y/YcBrowser/YcBrowser/1.1.13/` 下，
+   清单文件在仓库 `winget/manifests/y/YcBrowser/YcBrowser/1.1.14/` 下，
    用 `tools/gen_winget_manifest.py`（生成）与 `tools/submit_winget_manifest.py`
    （提交）可重复执行。收录后即成为微软官方分发渠道。
 2. **写一篇技术文章** —— 介绍 Rust 核心 + PyQt6 + QtWebEngine 的打包与
@@ -167,7 +167,7 @@ Configuration Name: windows-installer
 Root Element: ZIP
 PE Files:
   - Path: YcBrowser-<version>-setup.exe
-    Product Version: 1.1.13
+    Product Version: 1.1.14
 ```
 
 > 若 GitHub 上传的是 ZIP 包裹，需在此声明 ZIP 内部结构；
@@ -218,8 +218,8 @@ My Profile → API Tokens → Create API Token
 ### 步骤 7：触发签名
 
 ```bash
-git tag v1.1.13
-git push origin v1.1.13
+git tag v1.1.14
+git push origin v1.1.14
 ```
 
 CI 会自动：构建 → 上传产物 → 提交签名请求 → **等待你在 SignPath 面板人工审批** → 签名 → 回传。
@@ -229,7 +229,7 @@ CI 会自动：构建 → 上传产物 → 提交签名请求 → **等待你在
 ### 步骤 8：验证
 
 ```powershell
-Get-AuthenticodeSignature "YcBrowser-1.1.13-setup.exe" | Format-List
+Get-AuthenticodeSignature "YcBrowser-1.1.14-setup.exe" | Format-List
 ```
 
 应显示：

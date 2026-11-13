@@ -66,7 +66,8 @@ privacy policy and a code signing policy.
 
 ```
 YcBrowser is a newly public open-source project; its first public release was
-v1.1.13 in November 2026. It does not yet have significant external adoption, and
+v1.1.13 in November 2026 (followed by v1.1.14 with startup and
+installer-size optimizations). It does not yet have significant external adoption, and
 the repository currently has no stars, forks or third-party contributions. This
 project is submitted at the start of its public life.
 
@@ -117,7 +118,7 @@ Evidence of quality and transparency that does exist today:
 
 1. 先完成 [05-signpath-application.md](05-signpath-application.md) 中的
    「步骤 2.5 申请前必做的准备」（尤其 winget 收录与技术文章）
-2. 确认仓库已有 **Release**（至少 v1.1.13）
+2. 确认仓库已有 **Release**（至少 v1.1.13，现为 v1.1.14）
 3. 确认 GitHub 账号已启用 MFA，且仓库要求贡献者启用 MFA
 4. 打开 <https://signpath.org/apply>，按本文件逐项填写
 5. 亲自阅读条款并勾选 Code of Conduct consent
@@ -155,8 +156,8 @@ Evidence of quality and transparency that does exist today:
    Name:  windows-installer
    Root Element: ZIP
    PE Files:
-     - Path: YcBrowser-1.1.13-setup.exe
-       Product Version: 1.1.13
+     - Path: YcBrowser-1.1.14-setup.exe
+       Product Version: 1.1.14
    ```
 4. **创建签名策略（Signing Policy）**
    ```
