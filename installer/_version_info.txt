@@ -3,8 +3,8 @@
 # 每次构建会按 src/version.py 的版本号重新生成。
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 1, 13, 0,),
-    prodvers=(1, 1, 13, 0,),
+    filevers=(1, 1, 14, 0,),
+    prodvers=(1, 1, 14, 0,),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -19,11 +19,11 @@ VSVersionInfo(
           '080404B0',
           [StringStruct('CompanyName', 'Yc Browser'),
            StringStruct('FileDescription', 'Yc浏览器 —— 多引擎浏览器'),
-           StringStruct('FileVersion', '1.1.13.0'),
+           StringStruct('FileVersion', '1.1.14.0'),
            StringStruct('InternalName', 'OmniBrowser'),
            StringStruct('OriginalFilename', 'OmniBrowser.exe'),
            StringStruct('ProductName', 'Yc浏览器'),
-           StringStruct('ProductVersion', '1.1.13.0'),
+           StringStruct('ProductVersion', '1.1.14.0'),
            StringStruct('LegalCopyright', 'MIT License')])
       ]),
     VarFileInfo([VarStruct('Translation', [2052, 1200])])
