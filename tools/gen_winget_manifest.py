@@ -31,7 +31,7 @@ import urllib.request
 REPO = "yljlpc/YcBrowser"
 PACKAGE = "YcBrowser"
 IDENTIFIER = f"{PACKAGE}.{PACKAGE}"
-MANIFEST_VERSION = "1.12.0"
+MANIFEST_VERSION = "1.28.0"
 RELEASE_URL = "https://github.com/{repo}/releases/tag/v{version}"
 DOWNLOAD_URL = ("https://github.com/{repo}/releases/download/v{version}/"
                 "YcBrowser-{version}-setup.exe")
@@ -188,9 +188,9 @@ ManifestType: installer
 ManifestVersion: {MANIFEST_VERSION}
 """)
 
-    # 3) 中文本地化
+    # 3) 中文本地化（DefaultLocale，ManifestType 为 defaultLocale）
     write(os.path.join(base, f"{IDENTIFIER}.locale.zh-CN.yaml"), f"""\
-# yaml-language-server: $schema=https://aka.ms/winget-manifest.locale.{MANIFEST_VERSION}.schema.json
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.{MANIFEST_VERSION}.schema.json
 
 PackageIdentifier: {IDENTIFIER}
 PackageVersion: {v}
@@ -212,14 +212,13 @@ Tags:
 - translation
 - downloader
 - webengine
-Moniker: ycbrowser
-ManifestType: locale
+ManifestType: defaultLocale
 ManifestVersion: {MANIFEST_VERSION}
 """)
 
-    # 4) 英文本地化
+    # 4) 英文本地化（普通 locale）
     write(os.path.join(base, f"{IDENTIFIER}.locale.en-US.yaml"), f"""\
-# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.{MANIFEST_VERSION}.schema.json
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.locale.{MANIFEST_VERSION}.schema.json
 
 PackageIdentifier: {IDENTIFIER}
 PackageVersion: {v}
@@ -241,7 +240,6 @@ Tags:
 - translation
 - downloader
 - webengine
-Moniker: ycbrowser
 ManifestType: locale
 ManifestVersion: {MANIFEST_VERSION}
 """)

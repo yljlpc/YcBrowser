@@ -36,13 +36,20 @@ SignPath Foundation 的官方资格要求：
 - [x] **OSI 认可的开源许可证**（不允许双许可）→ 本项目用 **MIT** ✅ 已就绪
 - [x] **无恶意软件 / 无潜在不受欢迎程序** ✅
 - [x] **项目仍在积极维护** ✅
-- [ ] **已有至少一个已发布版本**（以可签名的形式）← 待完成（CI 构建中）
-- [x] **下载页有功能说明** → 已建 [README.md](../README.md) ✅
+- [x] **已有至少一个已发布版本**（以可签名的形式）→ v1.1.13 Release 已发布
+      <https://github.com/yljlpc/YcBrowser/releases> ✅
+- [x] **下载页有功能说明** → 已建 [README.md](../README.md)（中英双版本）✅
 - [x] **GitHub 仓库公开** → <https://github.com/yljlpc/YcBrowser> ✅ 已完成
 - [x] **构建流程完全自动化** → 已建 [.github/workflows/build-windows.yml](../.github/workflows/build-windows.yml) ✅
+- [x] **无专有非开源组件** → 已将随包方正商业字体（21 个 / 192MB）替换为
+      **思源宋体 Noto Serif SC（OFL 1.1）** ✅
+- [x] **构建脚本与 CI 配置纳入代码评审** → `main` 分支保护已启用 ✅
+- [x] **官方分发渠道** → GitHub Releases + winget 收录 PR
+      <https://github.com/microsoft/winget-pkgs/pull/479246> ✅
 - [ ] **GitHub 与 SignPath 账号均启用 MFA** ← 待完成（需账号持有人操作）
 - [ ] **SignPath 账号有 API Token**（Submitter 权限）← 获批后在控制台创建
 - [ ] **仓库已开启 2FA 要求**（要求所有贡献者启用 MFA）← 待完成
+- [ ] **可见度信号**（stars / 外部贡献 / 独立文章）← 待积累，见下方 §步骤 2.5
 
 > 📋 **逐字段表单答案**：见 [docs/07-signpath-form-answers.md](07-signpath-form-answers.md)
 > —— 该文件按 signpath.org/apply 的真实字段逐条给出可直接粘贴的答案。
@@ -96,26 +103,23 @@ https://github.com/yljlpc/YcBrowser
 | 独立第三方讨论 | 非作者撰写的文章、Reddit / Stack Overflow / 社区帖子 | ⬜ 无 |
 | 机构或组织背书 | 被某个开源组织收录、赞助、推荐 | ⬜ 无 |
 | 持续活跃 | 多个版本、规律更新、Issue 有响应 | ✅ v1.1.13，CI 持续构建 |
-| 发行渠道分发 | 被 winget / Chocolatey 等官方仓库收录 | ⬜ 未提交 |
+| 发行渠道分发 | 被 winget / Chocolatey 等官方仓库收录 | ✅ winget 收录 PR 已提交（microsoft/winget-pkgs#479246，待维护者合并） |
 
 **申请前能立刻做的（不需要等用户量）**：
 
-1. **提交 winget manifest** —— 这是最强的「分发渠道」信号，且技术上可独立完成。
-   本项目已产出标准 NSIS 安装包，winget 支持 `InstallerType: nullsoft`，
-   只需要一个 PR 到 `microsoft/winget-pkgs`：
-   ```
-   manifests/m/YcBrowser/YcBrowser/1.1.13/YcBrowser.installer.yaml
-   manifests/m/YcBrowser/YcBrowser/1.1.13/YcBrowser.yaml
-   ```
-   `winget create` 可自动生成初稿。收录后即成为官方分发渠道。
+1. **提交 winget manifest** ✅ **已完成** —— PR 已提交至
+   <https://github.com/microsoft/winget-pkgs/pull/479246>。
+   清单文件在仓库 `winget/manifests/y/YcBrowser/YcBrowser/1.1.13/` 下，
+   用 `tools/gen_winget_manifest.py`（生成）与 `tools/submit_winget_manifest.py`
+   （提交）可重复执行。收录后即成为微软官方分发渠道。
 2. **写一篇技术文章** —— 介绍 Rust 核心 + PyQt6 + QtWebEngine 的打包与
    完全独立交付实践（解决 WDAC 拦截、Qt 插件缺失、离线安装包体积控制等），
    发到掘金 / 知乎 / CSDN / Reddit r/Python / Hacker News。
    **必须是第三方视角的真实技术内容**，不得伪装成独立推荐。
 3. **持续发版并回复 Issue** —— 保持提交节奏与 Issue 响应本身就是活跃度证据。
-4. **完善 README 英文版** —— 基金会审阅者多为国际审阅人，纯中文 README 会
-   增加理解成本与「仅面向国内用户」的顾虑。英文 README 不是必需项，
-   但会明显降低审阅摩擦。
+4. **完善 README 英文版** ✅ **已完成** —— 见
+   [README.en.md](https://github.com/yljlpc/YcBrowser/blob/main/README.en.md)，
+   降低国际审阅者的理解成本与「仅面向国内用户」的顾虑。
 
 **申请时机建议**：完成上述 1、2 项后再提交，一次通过率显著更高。
 若被拒，官方允许在积累起足够可见度后再次申请。
@@ -340,7 +344,7 @@ Policy ID: {0283ac0f-fff1-49ae-ada1-8a933130cad6}
 |---|---|
 | 不含恶意软件或潜在不受欢迎程序 | ✅ |
 | 使用 OSI 认可的开源许可证，且**所有组件均无双许可** | ✅ MIT（见 [LICENSE](../LICENSE)） |
-| 不含专有、非开源组件（System Libraries 除外） | ✅ 依赖均为开源（Qt6/LGPL、PyQt6/GPL、Rust crates/MIT+Apache） |
+| 不含专有、非开源组件（System Libraries 除外） | ✅ 依赖均为开源（Qt6/LGPL、PyQt6/GPL、Rust crates/MIT+Apache、思源宋体/OFL）。**已移除随包的方正商业字体**（21 个 / 192MB），改用 SIL OFL 1.1 的思源宋体 |
 | 项目仍在积极维护 | ✅ |
 | **必须已以将要签名的形式发布过** | ⬜ 需先在 GitHub 创建 Release |
 | 功能必须在下载页或应用商店条目中描述 | ✅ [README](../README.md) |
