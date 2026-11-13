@@ -1,5 +1,7 @@
 # Yc浏览器（YcBrowser）
 
+[简体中文](README.md) | [English](README.en.md)
+
 一款以 **Rust 原生核心 + PyQt6（Qt 6）** 构建的多功能桌面浏览器，
 支持实时翻译与高速下载。
 
