@@ -311,13 +311,24 @@ class MainWindow(QMainWindow):
         self._connect_screens()
         self._connect_profile()
 
-        # 首个标签：先建空标签，延迟到窗口显示后再加载主页内容，
-        # 让窗口立即可见、Chromium 在后台预热，缩短“打开”等待感。
-        self._first_tab = self.add_tab(None)
+        # 首个标签：延后到事件循环启动后再创建。
+        #
+        # BrowserTab 里会实例化 QWebEngineView，这一步会触发 Chromium
+        # 初始化（约 1~2 秒）。若在窗口显示之前同步创建，用户从「双击图标」
+        # 到「看到界面」要干等这一整段时间；改成显示窗口后再建标签，
+        # 界面先出来、Chromium 在后台预热，感知延迟显著降低。
+        self._first_tab = None
+        QTimer.singleShot(0, self._create_first_tab)
         self.apply_ui_scale()
         self._apply_window_geometry()  # 按分辨率自动设定窗口大小并居中
         self._refresh_bookmark_state()
-        QTimer.singleShot(0, lambda: self.open_internal(self._first_tab, "home"))
+
+    def _create_first_tab(self):
+        """事件循环启动后创建首个标签页并加载主页。"""
+        if self._first_tab is not None:
+            return
+        self._first_tab = self.add_tab(None)
+        self.open_internal(self._first_tab, "home")
 
     # ---------------- 工具栏 ----------------
     def _add_act(self, name, text, sc_key, slot):

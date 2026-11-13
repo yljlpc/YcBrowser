@@ -18,6 +18,11 @@ on:
   push:
     branches: [main]
     tags: ['v*']
+  # PR 也要跑：main 的分支保护把「Build Windows installer」设为必需状态检查，
+  # 只有 PR 触发器才能让这个检查在 PR 上上报，否则 PR 永远处于 blocked 状态。
+  # 同时这也是 SignPath「可信构建系统」要求的：构建必须可验证、可复现。
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:

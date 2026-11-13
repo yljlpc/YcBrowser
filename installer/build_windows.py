@@ -351,6 +351,27 @@ def main():
     print("\n完成：", dist)
     print("版本：", VERSION)
 
+    # 3.5) 裁剪 Qt6 运行时载荷
+    #
+    # PyInstaller 的 hook 与「整目录收集」策略会把整个 Qt6 运行时塞进产物
+    # （bin 123 个 DLL / 2788 个文件 / 589 MB），而本应用只用到
+    # QtCore + QtGui + QtWidgets + QtPrintSupport + QtWebEngineCore +
+    # QtWebEngineWidgets 六个模块。
+    #
+    # 裁掉的绝大部分是：
+    #   - qml/ 整棵树（2329 个文件）—— 里面每个插件都依赖 PyInstaller
+    #     根本没收集的 Qt6 模块 DLL，本来就是坏的；本应用不用 QML；
+    #   - 5 个 *.debug.* 调试资源包（77 MB）—— DLL 字符串表里查无引用；
+    #   - 291 个非中英文的 .qm 翻译（54 MB）；
+    #   - QML / Quick3D / Designer / Multimedia / sql 驱动等无关插件与 DLL。
+    #
+    # 收益：文件数 2788 → 142，体积 589 MB → 365 MB。安装时逐文件写入、
+    # 逐文件被 Defender 实时扫描的成本随之大幅下降 —— 这是「安装很慢」
+    # 的主因。签名耗时也同步从 200+ 个文件降到 30+ 个。
+    #
+    # 必须排在签名之前：否则被删的文件会白跑一遍签名。
+    trim_payload(dist)
+
     # 4) 签名产物树（.pyd / .dll / .exe）
     #
     # 这一步不是可有可无的装饰：PyInstaller 产物里的 Python 扩展模块
@@ -381,6 +402,55 @@ def main():
         print("      「未知发布者」并可能触发 SmartScreen 提示。")
         print("      签名方式见 docs/04-windows-code-signing.md")
     return 0
+
+
+def trim_payload(dist):
+    """裁剪产物中用不到的 Qt6 运行时载荷。
+
+    复用 tools/trim_qt_payload.py：它解析 PE 导入表算出依赖闭包，
+    只删除可证明不被需要的东西，并在删完后做一次导入表完备性校验。
+    裁剪失败不阻断构建 —— 最坏情况只是产物大一点、装得慢一点。
+    """
+    sys.path.insert(0, os.path.join(ROOT, "tools"))
+    try:
+        import trim_qt_payload
+    except ImportError as exc:
+        print(f"⚠️ 无法加载裁剪模块 tools/trim_qt_payload.py: {exc}")
+        return False
+
+    print("\n=== 裁剪 Qt6 运行时载荷 ===")
+    before_files = sum(len(f) for _, _, f in os.walk(dist))
+    try:
+        keep, removed, freed, staging = trim_qt_payload.apply_trim(dist)
+    except Exception as exc:  # noqa: BLE001
+        print("!" * 66)
+        print(f"!! 裁剪失败（不影响构建，但安装包会明显变大）：{exc}")
+        print("!! 请检查 tools/trim_qt_payload.py")
+        print("!" * 66)
+        return False
+
+    after_files = sum(len(f) for _, _, f in os.walk(dist))
+    print(f"文件数：{before_files} → {after_files}（移除 {removed} 项）")
+    print(f"释放空间：{freed/1048576:.1f} MB")
+    if after_files > before_files * 0.6:
+        print("!" * 66)
+        print(f"!! 裁剪效果异常：仍有 {after_files} 个文件（预期约 140）")
+        print("!! 请检查 tools/trim_qt_payload.py 的保留规则")
+        print("!" * 66)
+        return False
+
+    problems = trim_qt_payload.verify_tree(dist)
+    if problems:
+        # 校验没过说明裁掉了必需件 —— 立刻回滚，绝不带着残缺的产物去打包。
+        # 裁剪用的是搬迁而非删除，所以回滚是可行的。
+        print("!" * 66)
+        print("!! 裁剪后有依赖未能解析，正在回滚到完整载荷")
+        restored = trim_qt_payload.restore_trim(dist, staging)
+        print(f"!! 已回滚 {restored} 个文件")
+        print("!! 若这些依赖确实必需，请补进 tools/trim_qt_payload.py 的保留名单后重建。")
+        print("!" * 66)
+        return False
+    return True
 
 
 def sign_tree(directory):
