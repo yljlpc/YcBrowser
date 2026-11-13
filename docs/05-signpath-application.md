@@ -292,12 +292,66 @@ Policy ID: {0283ac0f-fff1-49ae-ada1-8a933130cad6}
 
 ---
 
-## 七、参考资料
+## 七、官方条款逐条对照（2026-11 核实）
+
+来源：<https://www.signpath.org/terms>（该页标注为 Draft，以官网为准）
+
+### A. 免费 OSS 订阅的资格条件
+
+| 条款 | 本项目状态 |
+|---|---|
+| 不含恶意软件或潜在不受欢迎程序 | ✅ |
+| 使用 OSI 认可的开源许可证，且**所有组件均无双许可** | ✅ MIT（见 [LICENSE](../LICENSE)） |
+| 不含专有、非开源组件（System Libraries 除外） | ✅ 依赖均为开源（Qt6/LGPL、PyQt6/GPL、Rust crates/MIT+Apache） |
+| 项目仍在积极维护 | ✅ |
+| **必须已以将要签名的形式发布过** | ⬜ 需先在 GitHub 创建 Release |
+| 功能必须在下载页或应用商店条目中描述 | ✅ [README](../README.md) |
+| 不得包含识别/利用安全漏洞或规避执行环境限制的功能 | ✅ 浏览器本体（DevTools 属标准浏览器功能） |
+| 不得损害用户隐私与安全 | ✅ 见 [PRIVACY.md](../PRIVACY.md) |
+| 未经警告不得修改用户系统配置 | ✅ 仅写安装目录与用户数据目录 |
+| 提供安装功能的软件必须提供卸载说明 | ✅ NSIS 卸载程序 |
+
+### B. 项目主页必须包含的内容（**逐字要求**）
+
+SignPath 要求仓库主页含有：
+
+- [x] 字面文字 **"Code signing policy"** → [CODE_SIGNING_POLICY.md](../CODE_SIGNING_POLICY.md)
+- [x] 字面句子 **"Free code signing provided by SignPath.io, certificate by SignPath Foundation."**
+      → 同上文件首段
+- [x] 角色划分与成员列表（Author / Reviewer / Approver）→ 同上文件
+- [x] 隐私政策链接 → [PRIVACY.md](../PRIVACY.md)
+
+> ⚠️ 角色成员需填入真实 GitHub 用户名；**所有成员必须启用 MFA**。
+
+### C. 构建要求（origin verification）
+
+| 要求 | 本项目落实 |
+|---|---|
+| 二进制须以可验证方式构建自本仓库源码 | ✅ GitHub Actions 触发 |
+| 构建配置来自源码控制，**不得**用 CI 界面临时覆盖 | ✅ 构建脚本全部入库 |
+| **不得复用早期构建的缓存产物** | ✅ CI 只缓存 cargo 依赖下载，**不缓存 `core/target`** |
+| 构建脚本与 CI 配置计为源码，需经评审 | ✅ 走 PR 评审流程 |
+| 产物元数据正确：产品名匹配项目名、版本每次一致 | ✅ NSIS `VIAddVersionKey` + PyInstaller `--version-file`，版本取自 `src/version.py` |
+| 每次发布需人工批准签名 | ✅ SignPath approver 角色 |
+
+### D. 可签名的产物类型
+
+SignPath 支持 Windows 可执行文件、MSI、CAB、APX/MSIX、**NuGet**、
+**RPM**、**Debian 包**、OCI 镜像等。本项目的
+`YcBrowser-<版本>-setup.exe` 与 `omnibrowser_*.deb` 均在支持范围内。
+
+> 上游组件（Qt6 DLL 等）保留各自原有签名，不由本项目证书重签；
+> 条款允许包含未签名的上游二进制，但保留未来收紧的权利。
+
+---
+
+## 八、参考资料
 
 - SignPath Foundation 官网：<https://signpath.org>
 - 申请入口：<https://signpath.org/apply>
 - 控制台：<https://app.signpath.io>
 - 文档：<https://about.signpath.io/documentation>
+- **官方条款（资格条件）：<https://www.signpath.org/terms>**
 - GitHub Action：<https://github.com/signpath/signpath-action>
 - 已签名项目参考：<https://super-productivity.com/code-signing/>
 - Azure Artifact Signing（备选）：<https://learn.microsoft.com/azure/trusted-signing/>

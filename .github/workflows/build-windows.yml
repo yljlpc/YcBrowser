@@ -1,8 +1,18 @@
 name: Build Windows
 
-# SignPath Foundation 要求：构建流程必须完全自动化，且 GitHub 需被注册为
-# 「可信构建系统」（Trusted Build System）。签名步骤在 tag 推送时触发，
-# 由 SignPath 核验产物确实来自本仓库后用其 HSM 中的证书签名。
+# ============================================================================
+# SignPath Foundation 要求的「可信构建系统」（Trusted Build System）
+#
+# 官方条件（见 https://www.signpath.org/terms 与 docs/05-signpath-application.md）：
+#   1. 二进制必须以可验证的方式（origin verification）从本仓库源码构建
+#   2. 构建配置必须来自源码控制中的文件，不能靠 CI job 里的临时覆盖
+#   3. **不得复用早期构建的缓存产物** —— 因此这里不缓存 core/target
+#      （只缓存 cargo 的依赖下载，那是取依赖而非构建产物）
+#   4. 产物元数据必须正确：产品名与项目名一致，版本号在每次构建中一致
+#   5. 每次发布都需要人工批准签名（approver 角色）
+#
+# 签名步骤在推送 v* tag 时触发；未配置 SignPath Secret 时自动跳过。
+# ============================================================================
 on:
   push:
     branches: [main]
@@ -20,6 +30,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # 保留凭据，供 SignPath 校验构建来源；完整历史用于溯源
+          persist-credentials: true
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -36,16 +50,21 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install pyinstaller PyQt6 PyQt6-WebEngine
+          # NSIS：生成安装包所需（runner 镜像通常已带，此处显式确保）
+          if (-not (Get-Command makensis -ErrorAction SilentlyContinue)) {
+            choco install nsis --no-progress -y
+            Write-Output "::add-path::C:\Program Files (x86)\NSIS"
+          }
 
-      - name: Cache PyQt6 and cargo
+      # 仅缓存 cargo 的依赖下载，不缓存 core/target（构建产物必须每次重新构建）
+      - name: Cache cargo dependencies only
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            core/target
-          key: ${{ runner.os }}-build-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-build-
+          key: ${{ runner.os }}-cargo-deps-${{ hashFiles('core/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-deps-
 
       - name: Build Rust core
         working-directory: core
@@ -59,9 +78,15 @@ jobs:
         run: python tools/test_logic.py
 
       - name: Build portable app and NSIS installer
-        run: python installer/build_windows.py --no-installer
+        # 注意：不能加 --no-installer —— SignPath 要签的是最终的安装包
+        run: python installer/build_windows.py
+
+      - name: Verify bundle completeness
+        # 静态自检：Qt 运行时、WebEngine 资源、依赖闭包是否齐备
+        run: python tools/verify_bundle.py dist/OmniBrowser
 
       - name: Package installer artifact
+        id: artifact-id
         shell: pwsh
         run: |
           $version = (Select-String -Path src/version.py -Pattern '^VERSION\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
@@ -70,9 +95,11 @@ jobs:
           New-Item -ItemType Directory -Force -Path dist-artifact | Out-Null
           Copy-Item $setup "dist-artifact/YcBrowser-$version-setup.exe"
           Write-Output "ARTIFACT=dist-artifact/YcBrowser-$version-setup.exe"
+          # 记录构建溯源信息，便于人工审计
+          Write-Output "COMMIT=${{ github.sha }}"
+          Write-Output "VERSION=$version"
 
       - name: Upload unsigned artifact
-        id: artifact-id
         uses: actions/upload-artifact@v4
         with:
           name: windows-installer
@@ -83,9 +110,9 @@ jobs:
       # SignPath 签名步骤
       #
       # 需要仓库配置以下 Secrets（见 docs/04-windows-code-signing.md）：
-      #   SIGNPATH_API_TOKEN        — SignPath API Token（Submitter 权限）
-      #   SIGNPATH_ORGANIZATION_ID  — SignPath 组织 ID
-      #   SIGNPATH_PROJECT_SLUG     — 项目 slug
+      #   SIGNPATH_API_TOKEN          — SignPath API Token（Submitter 权限）
+      #   SIGNPATH_ORGANIZATION_ID    — SignPath 组织 ID
+      #   SIGNPATH_PROJECT_SLUG       — 项目 slug
       #   SIGNPATH_SIGNING_POLICY_SLUG — 签名策略（通常为 release-signing）
       #
       # 未配置这些 Secret 时本步骤自动跳过，不影响未签名构建。
@@ -113,7 +140,12 @@ jobs:
         run: |
           $version = (Select-String -Path src/version.py -Pattern '^VERSION\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
           $setup = "dist-artifact/YcBrowser-$version-setup.exe"
-          & "${env:ProgramFiles(x86)}\Windows Kits\10\bin\10.0.22621.0\x64\signtool.exe" verify /pa /v $setup
+          $signtool = "${env:ProgramFiles(x86)}\Windows Kits\10\bin\10.0.22621.0\x64\signtool.exe"
+          if (-not (Test-Path $signtool)) {
+            $signtool = (Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
+                         Sort-Object FullName -Descending | Select-Object -First 1).FullName
+          }
+          & $signtool verify /pa /v $setup
           if ($LASTEXITCODE -ne 0) { throw "签名验证失败" }
 
       - name: Upload signed installer
@@ -123,3 +155,13 @@ jobs:
           name: windows-installer-signed
           path: dist-artifact/
           if-no-files-found: error
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v') && env.SIGNPATH_API_TOKEN != ''
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path src/version.py -Pattern '^VERSION\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
+          gh release create "${{ github.ref_name }}" `
+            --title "Yc浏览器 $version" `
+            --notes "由 GitHub Actions 自动构建并经 SignPath Foundation 签名。" `
+            "dist-artifact/YcBrowser-$version-setup.exe"

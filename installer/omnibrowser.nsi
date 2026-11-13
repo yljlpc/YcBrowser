@@ -18,6 +18,23 @@ OutFile "YcBrowser-${VERSION}-setup.exe"
 InstallDir "${INSTDIR}"
 RequestExecutionLevel admin
 
+; ---------------------------------------------------------------------------
+; 版本资源（VERSIONINFO）
+;
+; SignPath Foundation 要求产物元数据必须正确且一致：
+;   - 产品名必须与项目名一致
+;   - 版本号在每次构建中相同（由 build_windows.py 从 src/version.py 注入）
+; Windows 的「属性 → 详细信息」面板与文件属性对话框读取的就是这里的值。
+; ---------------------------------------------------------------------------
+VIProductVersion "${VERSION}.0"
+VIAddVersionKey /LANG=2052 "ProductName"     "${APPNAME}"
+VIAddVersionKey /LANG=2052 "ProductVersion"  "${VERSION}.0"
+VIAddVersionKey /LANG=2052 "FileDescription" "${APPNAME} 安装程序"
+VIAddVersionKey /LANG=2052 "FileVersion"     "${VERSION}.0"
+VIAddVersionKey /LANG=2052 "CompanyName"     "${PUBLISHER}"
+VIAddVersionKey /LANG=2052 "LegalCopyright"  "MIT License"
+VIAddVersionKey /LANG=2052 "Comments"        "多引擎浏览器（Blink / WebKit / Trident 兼容）"
+
 ; 安装器与卸载器均显示 Yc 图标（固化）
 Icon "${ICO}"
 UninstallIcon "${ICO}"

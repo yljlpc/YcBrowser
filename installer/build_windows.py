@@ -98,6 +98,57 @@ def run(cmd, cwd=None):
     subprocess.check_call(cmd, cwd=cwd)
 
 
+def _write_version_file(version):
+    """生成 PyInstaller 用的 VERSIONINFO 文件。
+
+    SignPath 要求产物元数据必须正确且一致 —— 产品名与项目名一致、
+    版本号在每次构建中相同。安装包由 NSIS 的 VIAddVersionKey 提供，
+    便携版主程序则需要这个文件，两边保持一致。
+    """
+    parts = [int(p) for p in version.split(".")]
+    while len(parts) < 4:
+        parts.append(0)
+    tuple4 = ", ".join(str(p) for p in parts[:4])
+    ver4 = ".".join(str(p) for p in parts[:4])
+
+    content = f'''# -*- coding: utf-8 -*-
+# 由 installer/build_windows.py 自动生成，请勿手工修改。
+# 每次构建会按 src/version.py 的版本号重新生成。
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=({tuple4},),
+    prodvers=({tuple4},),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+  ),
+  kids=[
+    StringFileInfo(
+      [
+        StringTable(
+          '080404B0',
+          [StringStruct('CompanyName', 'Yc Browser'),
+           StringStruct('FileDescription', 'Yc浏览器 —— 多引擎浏览器'),
+           StringStruct('FileVersion', '{ver4}'),
+           StringStruct('InternalName', 'OmniBrowser'),
+           StringStruct('OriginalFilename', 'OmniBrowser.exe'),
+           StringStruct('ProductName', 'Yc浏览器'),
+           StringStruct('ProductVersion', '{ver4}'),
+           StringStruct('LegalCopyright', 'MIT License')])
+      ]),
+    VarFileInfo([VarStruct('Translation', [2052, 1200])])
+  ]
+)
+'''
+    path = os.path.join(ROOT, "installer", "_version_info.txt")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(content)
+    return path
+
+
 def _qt_runtime_args():
     """构造显式收集 Qt6 运行时资源的 PyInstaller 参数。
 
@@ -263,6 +314,14 @@ def main():
     if os.path.isfile(hook):
         cmd += ["--runtime-hook", hook]
         print("✓ 使用运行时钩子：", hook)
+
+    # 版本资源：保证便携版主程序与安装包的元数据一致
+    try:
+        ver_file = _write_version_file(VERSION)
+        cmd += ["--version-file", ver_file]
+        print("✓ 版本资源：", ver_file)
+    except Exception as exc:
+        print("⚠️ 生成版本资源失败（不影响打包）：", exc)
     if font_dir:
         cmd += ["--add-data", f"{font_dir};fonts"]
 

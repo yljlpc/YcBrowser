@@ -202,6 +202,12 @@ QT_QPA_PLATFORM=offscreen python tools/test_browser.py
 本项目移植了 [SwiftDL](https://github.com/harshsinghsv/swiftdl)（MIT）的下载引擎
 算法内核。完整的第三方组件与许可证声明见 [LICENSE](LICENSE)。
 
+## 代码签名与隐私
+
+- [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md) —— 代码签名策略、签名覆盖范围与团队角色
+- [PRIVACY.md](PRIVACY.md) —— 隐私政策（本地数据、翻译功能的数据流向、引擎档位对请求的影响）
+- [docs/04-windows-code-signing.md](docs/04-windows-code-signing.md) —— 签名机制与证书获取途径
+
 ---
 
 ## 许可证
