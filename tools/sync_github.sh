@@ -204,6 +204,25 @@ EOF
 fi
 
 ASSETS=()
+# 若当前版本号的安装包尚未构建，自动构建。
+#
+# 为什么需要这一步：版本号由 pre-commit hook 自动递增（每次源码提交 +1），
+# 而 Release 的 tag 取自**推送前**的 src/version.py。若构建产物落后于版本号，
+# 就会出现「tag 是 v1.1.21，但产物还是 v1.1.20」的空发布。
+# 这里按 tag 对齐：缺哪个版本就构建哪个版本。
+need_build=0
+for f in package/omnibrowser_"${VER}"_amd64.deb \
+         package/omnibrowser-deepin_"${VER}"_amd64.deb; do
+    [ -f "$f" ] || need_build=1
+done
+if [ "$need_build" = "1" ] && [ "$DRY_RUN" != "1" ]; then
+    echo "安装包版本与 tag 不一致（tag=v${VER}），正在构建…"
+    if bash package/build_debs.sh 2>&1 | grep -E "构建版本|产物|错误|Error" | sed 's/^/    /'; then
+        echo "✓ 构建完成"
+    else
+        echo "⚠️ 构建过程有告警，请核对产物是否存在"
+    fi
+fi
 for f in package/omnibrowser_"${VER}"_amd64.deb \
          package/omnibrowser-deepin_"${VER}"_amd64.deb; do
     [ -f "$f" ] && ASSETS+=("$f")
