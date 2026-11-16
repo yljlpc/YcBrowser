@@ -988,6 +988,11 @@ class MainWindow(QMainWindow):
         tab.load_progress.connect(self._on_progress)
         tab.open_internal.connect(lambda name, _tab=tab: self.open_internal(_tab, name))
         tab.find_result.connect(lambda n, a, _tab=tab: self._on_find_result(_tab, n, a))
+        # 新窗口请求（target=_blank / window.open）：Qt 要求同步接管，
+        # 因此这里直接在信号回调里建标签并挂上新页面。
+        tab.new_window_page.connect(
+            lambda page, _tab=tab: self._on_new_window_page(_tab, page)
+        )
 
         if html is not None:
             tab.set_html(html)
@@ -995,6 +1000,44 @@ class MainWindow(QMainWindow):
             self.open_internal(tab, target[len("omni://"):] or "home")
         elif target:
             tab.load_url(target)
+        return tab
+
+    def _on_new_window_page(self, src_tab, page):
+        """处理 target="_blank" / window.open() 的新窗口请求。
+
+        Qt 的 createWindow() 时序要求同步接管新页面（Qt 在 createWindow
+        返回后立刻把 WebContents 灌入该 page），所以这里当场新建标签页
+        并 setPage，不能用 QTimer 延后。
+
+        新标签页沿用来源标签页的引擎与隐私属性。
+        """
+        if page is None:
+            return
+        engine = self.engine_combo.currentData() or "blink"
+        doc_mode = "ie11" if engine == "trident" else "edge"
+        private = bool(getattr(src_tab, "_private", False))
+        if private or self._private_window:
+            private = True
+        tab = BrowserTab(self.core, self, private=private)
+        if engine != "blink" or doc_mode != "edge":
+            tab.set_engine(engine, doc_mode)
+        tab.apply_ui_scale(self._ui_scale)
+
+        idx = self.tabs.addTab(tab, "新标签页")
+        self.tabs.setCurrentIndex(idx)
+
+        tab.title_changed.connect(lambda t, _tab=tab: self._on_title(_tab, t))
+        tab.icon_changed.connect(lambda ic, _tab=tab: self._on_icon(_tab, ic))
+        tab.url_changed.connect(lambda u, _tab=tab: self._on_url(_tab, u))
+        tab.load_progress.connect(self._on_progress)
+        tab.open_internal.connect(lambda name, _tab=tab: self.open_internal(_tab, name))
+        tab.find_result.connect(lambda n, a, _tab=tab: self._on_find_result(_tab, n, a))
+        tab.new_window_page.connect(
+            lambda p, _tab=tab: self._on_new_window_page(_tab, p)
+        )
+
+        # 关键：接管 Qt 创建的新页面（新窗口内容随后由 Qt 灌入）
+        tab.attach_page(page)
         return tab
 
     def close_tab(self, idx):

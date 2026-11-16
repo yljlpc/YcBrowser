@@ -35,11 +35,15 @@ def home_html(engine_label="Blink"):
   .card:hover {{ border-color:#2b6cff; }}
   .t {{ font-size:16px; }}
   .u {{ color:#8a9099; font-size:12px; margin-top:4px; }}
+  .nav {{ margin-top:28px; font-size:14px; }}
+  .nav a {{ color:#2f6fed; text-decoration:none; }}
+  .nav a:hover {{ text-decoration:underline; }}
 </style></head>
 <body>
   <h1>Yc浏览器</h1>
   <div class="sub">当前渲染内核：{engine_label} · 在地址栏输入网址或搜索词即可开始</div>
   <div class="grid">{cards}</div>
+  <div class="nav"><a href="/about">关于 Yc浏览器</a></div>
 </body></html>"""
 
 
@@ -58,6 +62,9 @@ def about_html(version=None):
   ul {{ margin:6px 0 6px 0; }}
   li {{ margin:4px 0; }}
   .foot {{ color:#8a9099; font-size:13px; margin-top:28px; border-top:1px solid #e2e5ea; padding-top:12px; }}
+  .nav {{ margin-top:18px; font-size:14px; }}
+  .nav a {{ color:#2f6fed; text-decoration:none; }}
+  .nav a:hover {{ text-decoration:underline; }}
 </style></head>
 <body>
   <h1>Yc浏览器</h1>
@@ -101,6 +108,8 @@ def about_html(version=None):
   <div class="foot">提示：Trident 兼容为模拟实现，并非 Windows 原生 MSHTML；
   它通过浏览器标识伪装与 DOM 垫片提供 IE 兼容语义。本软件遵循系统 Qt 6 运行时许可。<br><br>
   <b>版权所有 © 杨凌雨晨商贸有限公司</b> 提供　·　联系邮箱：554669500@QQ.COM</div>
+
+  <div class="nav"><a href="/">返回主页</a></div>
 </body></html>"""
 
 

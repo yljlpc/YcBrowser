@@ -6,13 +6,37 @@
 - 仅当引擎需要伪装 UA（Trident 兼容）时才创建独立的 off-the-record profile，并在切回时归还；
 - 内部页 omni:// 被拦截并交回主窗口用 setHtml 渲染。
 """
-from PyQt6.QtCore import pyqtSignal, QUrl
+from PyQt6.QtCore import QTimer, pyqtSignal, QUrl
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import QVBoxLayout, QWidget
 
 from .profile import get_app_profile
+
+# 内部页用 setHtml 渲染时必须提供 base URL：否则页面 origin 为 about:blank，
+# QtWebEngine 不会为页面内链接发射导航请求，主页卡片点击就"没有任何反应"。
+#
+# base URL 必须使用**标准 scheme**。这是实测踩过的坑：
+#   - 无 base URL（about:blank）：Chromium 完全不发射链接导航请求 → 点击无反应；
+#   - 自定义 scheme（yc-app://internal/home）：Chromium 把页面视为 opaque origin，
+#     即使用 QWebEngineUrlScheme.registerScheme() 注册为标准语法也无效；
+#     表现是网页事件（mousedown/mouseup/click）都正常命中链接，
+#     acceptNavigationRequest 也收到请求并返回 True，但导航被 Chromium 拦下，
+#     urlChanged 始终为空 —— 用户看到的仍然是"点击毫无反应"。
+#   - 标准 https base：点击正常导航（已用原生 QWebEngineView 对照实验证实）。
+#
+# 这里取一个保留域名（example.com，RFC 2606 保留，不会被真实访问），
+# 仅作链接解析基准与 origin 载体，不会产生任何网络请求。
+INTERNAL_BASE_URL = QUrl("https://internal.yc-browser.example/")
+
+# 内部 base 域名与内部页路径映射（供 acceptNavigationRequest 识别内部页链接）
+INTERNAL_BASE_HOST = INTERNAL_BASE_URL.host()
+INTERNAL_PATHS = {
+    "/": "home",
+    "/home": "home",
+    "/about": "about",
+}
 
 # Trident 兼容模式下注入的最小遗留 DOM 垫片（仅用于让老站点按 IE 语义加载）。
 TRIDENT_SHIM = """
@@ -33,13 +57,80 @@ class BrowserPage(QWebEnginePage):
     def __init__(self, profile, parent=None):
         super().__init__(profile, parent)
         self.on_internal = None
+        # 外部链接导航回调：用于清除内部页标记，让地址栏从 omni:// 切回真实 URL。
+        self.on_external_nav = None
+        # 新窗口请求回调：
+        #   on_new_window(url)     —— 已知目标 URL 时，直接在主窗口开新标签页
+        #   on_new_window_page(page)—— Qt 交回一个空页面（新窗口/弹窗场景），由主窗口接管
+        self.on_new_window = None
+        self.on_new_window_page = None
 
     def acceptNavigationRequest(self, url, _type, is_main):
-        if url.scheme() == "omni":
+        # 内部页拦截有两种形式：
+        #  1) omni://about —— 旧式自定义 scheme 地址栏入口；
+        #  2) 内部 base 域名下的相对路径（如 /about）—— 内部页之间的链接。
+        #     为什么不用 omni:// 做页面内链接：内部页的 origin 是标准 https
+        #     （见 INTERNAL_BASE_URL 注释），Chromium 会把不认识的 omni://
+        #     当作外部协议处理并直接丢弃，不会发射导航请求，链接点了没反应。
+        #
+        # 关键：区分两种触发来源。
+        #  - omni:// 是本软件自有 scheme（地址栏输入 / 程序调用），任何导航类型
+        #    都要拦截并转回内部页渲染；
+        #  - 内部 base 域名下的相对路径（/about 等）只由页面内链接点击产生，
+        #    必须限定 NavigationTypeLinkClicked。否则 setHtml 自身加载 base URL
+        #    （NavigationTypeTyped，path="/"）也会被拦截，形成
+        #    setHtml → 拦截 → setHtml 的递归：渲染器卡死、点击全部无反应，
+        #    严重时进程 SIGTRAP。
+        if is_main and url.scheme() == "omni":
             if callable(self.on_internal):
-                self.on_internal(url.host() or "home")
+                self._defer_internal(url.host() or "home")
             return False
+
+        if is_main and _type == QWebEnginePage.NavigationType.NavigationTypeLinkClicked:
+            if url.host() == INTERNAL_BASE_HOST:
+                name = INTERNAL_PATHS.get(url.path().rstrip("/") or "/", "")
+                if name:
+                    if callable(self.on_internal):
+                        self._defer_internal(name)
+                    return False
+            # 用户在内部页（setHtml）点击了外部链接：这是真实导航，放行前清除
+            # 内部页标记，否则地址栏会一直停在 omni://home，看起来像"没反应"。
+            if callable(self.on_external_nav):
+                self.on_external_nav(url)
         return super().acceptNavigationRequest(url, _type, is_main)
+
+    def _defer_internal(self, name):
+        """延迟到事件循环再渲染内部页。
+
+        必须在 acceptNavigationRequest 回调栈之外调用 setHtml：在回调内
+        同步重入渲染器会导致 Chromium 渲染进程崩溃（进程 SIGTRAP）。
+        这里用 singleShot(0) 把渲染排到当前事件循环迭代之后。
+        """
+        QTimer.singleShot(0, lambda: self.on_internal(name))
+
+    def createWindow(self, _window_type):
+        """Qt WebEngine 新窗口请求入口（target="_blank" / window.open()）。
+
+        Qt 默认**完全忽略**新窗口请求：链接点击后什么都不会发生，这是用户
+        反馈的"点击没反应"第二类根因。
+
+        机制依据 Qt 源码（qtwebengine/src/core/api/qwebenginepage.cpp）：
+        `adoptNewWindow()` 先调用 `createWindow()`；返回非空 page 时 Qt 会把
+        新 WebContents 接管进该 page 并自动 `setUrl(targetUrl)`；只有返回
+        nullptr 才会退而发射 `newWindowRequested` 信号。
+
+        注意：PyQt6 的 QWebEngineNewWindowRequest **没有暴露 accept()/reject()**
+        （见 dir() 输出），因此无法用信号方式标记"已处理"，覆写 createWindow
+        是唯一可靠路径。
+
+        这里返回一个新页面，交由主窗口包成新标签页。
+        """
+        # 页面必须与源页共用同一个 profile，否则 Qt 报
+        # "Can not adopt content from a different WebEngineProfile."
+        page = BrowserPage(self.profile(), None)
+        if callable(self.on_new_window_page):
+            self.on_new_window_page(page)
+        return page
 
 
 class BrowserTab(QWidget):
@@ -49,6 +140,8 @@ class BrowserTab(QWidget):
     load_progress = pyqtSignal(int)
     open_internal = pyqtSignal(str)
     find_result = pyqtSignal(int, int)
+    # 新窗口请求：携带 Qt 创建好的新页面（由主窗口包成新标签页）
+    new_window_page = pyqtSignal(object)
 
     def __init__(self, core, parent=None, private=False):
         super().__init__(parent)
@@ -79,15 +172,39 @@ class BrowserTab(QWidget):
 
     def _make_page(self, profile):
         self.profile = profile
-        self.page = BrowserPage(profile, self.view)
-        self.view.setPage(self.page)
+        page = BrowserPage(profile, self.view)
+        self.view.setPage(page)
+        self._wire_page(page)
+
+    def _wire_page(self, page):
+        """把页面事件接到标签页信号上（新建页与被接管的新页面共用）。"""
+        self.page = page
         self.page.on_internal = lambda host: self.open_internal.emit(host or "home")
+        # 外部链接点击后清除内部页标记，地址栏恢复显示真实 URL；
+        # 只在确有标记时清，避免影响普通网页导航。
+        self.page.on_external_nav = lambda url: self._clear_internal_flag(url)
+        # 新窗口请求（target=_blank / window.open）：交由主窗口开新标签页。
+        self.page.on_new_window_page = lambda p: self.new_window_page.emit(p)
         self.page.titleChanged.connect(lambda t: self.title_changed.emit(t or "新标签页"))
         self.page.iconChanged.connect(self.icon_changed.emit)
         self.page.urlChanged.connect(self.url_changed.emit)
         self.page.loadProgress.connect(self.load_progress.emit)
         self.page.loadFinished.connect(self._on_load_finished)
         self.page.findTextFinished.connect(self._on_find_result)
+
+    def attach_page(self, page):
+        """接管外部创建的页面（来自 createWindow 新窗口请求）。
+
+        Qt 的时序要求：createWindow() 返回后，Qt 立刻把新 WebContents
+        灌入返回的 page，因此必须在 createWindow 调用栈内同步完成
+        `view.setPage(page)`，否则新页面拿不到渲染器。
+        """
+        self.view.setPage(page)
+        # 被接管的页面自带来源标签页的 profile；Qt 要求被接管内容与页面
+        # 处于同一 profile，否则报 "Can not adopt content from a different
+        # WebEngineProfile."。这里同步标签页的 profile 记录。
+        self.profile = page.profile()
+        self._wire_page(page)
 
     def _on_find_result(self, result):
         self.find_result.emit(result.numberOfMatches(), result.activeMatch())
@@ -103,7 +220,14 @@ class BrowserTab(QWidget):
         self.view.load(QUrl.fromUserInput(url))
 
     def set_html(self, html: str):
-        self.view.setHtml(html)
+        # 必须带 base URL：QtWebEngine 对无 base 的 setHtml 页面不发射链接导航
+        # 请求，主页卡片点击会毫无反应。base 用自定义 scheme，仅作解析基准。
+        self.view.setHtml(html, INTERNAL_BASE_URL)
+
+    def _clear_internal_flag(self, url=None):
+        """从内部页点击外部链接后清除 omni 标记，地址栏切回真实 URL。"""
+        if self._internal_page:
+            self._internal_page = ""
 
     # ---- 打印 / PDF ----
     def print_to_pdf(self, path: str, callback=None):
