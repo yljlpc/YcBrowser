@@ -9,7 +9,7 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT" || exit 1
 
-CASES="${*:-R1 R2 R3 R4 R5 R6}"
+CASES="${*:-R1 R1b R2 R3 R4 R5 R6}"
 OUT_DIR="$ROOT/outputs"
 mkdir -p "$OUT_DIR"
 

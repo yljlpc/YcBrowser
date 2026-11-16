@@ -223,10 +223,24 @@ def case_R2(win, core):
 
 
 def case_R1(win, core):
-    """同窗口普通外链点击。"""
+    """同窗口普通外链点击。
+
+    目标站点用 example.com（稳定可达）做判定，避免把「目标站点网络不可达」
+    误判成「点击无反应」。
+    实测结论：目标换成 github.com 时点击同样命中链接、导航请求同样发出并被
+    接受，但 URL 不变 —— 那是 Chromium 到该站点的网络/DNS 问题，不是点击缺陷
+    （见 tools/diag_accept.py 的 v0/v1/v2/v3 对照：连把 acceptNavigationRequest
+    猴补为直接 return True 都一样失败，而 example.com 变体成功）。
+    """
     log("--- R1 同窗口普通外链点击 ---")
     t1 = win.add_tab(None)
-    t1.set_html(LOCAL_HTML)
+    t1.set_html(
+        "<html><body style='margin:0;font-family:sans-serif'>"
+        "<div style='height:200px;background:#eee'>占位区</div>"
+        "<a id='lnk' href='https://example.com' "
+        "style='display:block;padding:20px;font-size:20px'>去 Example</a>"
+        "</body></html>"
+    )
     wait_ms(2500)
     old = t1.page.url().toString()
     rect, scr = real_click(t1, "#lnk", 0)
@@ -234,10 +248,65 @@ def case_R1(win, core):
     wait_url_change(t1, old, 20000)
     wait_ms(2000)
     cur = t1.page.url().toString()
-    ok = cur != old and "github.com" in cur
+    ok = cur != old and "example.com" in cur
     log(f"  结果: {'✅ 有反应' if ok else '❌ 无反应'}  URL: {cur[:80]}")
     log(f"  地址栏: {win.address.text()[:80]}")
     return [("R1 同窗口普通外链点击", ok)]
+
+
+def case_R1b(win, core):
+    """同窗口外链点击 —— 目标为 github.com（真实用户常访问的站点）。
+
+    判定分两级：
+      1) 点击是否命中链接、导航请求是否发出并被接受（产品逻辑）；
+      2) 最终 URL 是否真的切到目标站点（受目标站点网络可达性影响）。
+    两者分别记录，便于区分产品缺陷与外部网络问题。
+    """
+    log("--- R1b 同窗口外链点击（目标 github.com） ---")
+    t1 = win.add_tab(None)
+    t1.set_html(
+        "<html><body style='margin:0;font-family:sans-serif'>"
+        "<div style='height:200px;background:#eee'>占位区</div>"
+        "<a id='lnk' href='https://github.com' "
+        "style='display:block;padding:20px;font-size:20px'>去 GitHub</a>"
+        "</body></html>"
+    )
+    wait_ms(2500)
+    old = t1.page.url().toString()
+    seen = []
+    orig = t1.page.acceptNavigationRequest
+
+    def spy(url, ty, im):
+        r = orig(url, ty, im)
+        seen.append((url.toString()[:60], str(ty), r))
+        return r
+
+    t1.page.acceptNavigationRequest = spy
+    rect, scr = real_click(t1, "#lnk", 0)
+    log(f"  链接 CSS 坐标 {rect} → 屏幕坐标 {scr}")
+    # 外网重页面（github 首页资源量大、需建 TLS 连接）首屏可能需要 20s+，
+    # 固定 20s 超时会造成"超时误判为点击无反应"。这里轮询到 45s。
+    t0 = time.time()
+    cur = old
+    while time.time() - t0 < 45:
+        wait_ms(2500)
+        cur = t1.page.url().toString()
+        if cur != old:
+            break
+    elapsed = time.time() - t0
+    log(f"  URL 切换耗时: {elapsed:.1f}s")
+    log(f"  导航请求: {seen}")
+    clicked = bool(rect and rect.get("ok"))
+    accepted = any(u.startswith("https://github.com") and r for u, _, r in seen)
+    navigated = cur != old and "github.com" in cur
+    log(f"  点击命中链接: {'✅' if clicked else '❌'}")
+    log(f"  导航请求已发出且被接受: {'✅' if accepted else '❌'}")
+    log(f"  最终 URL: {cur[:70]}")
+    log(f"  → {'✅ 已导航到 github.com' if navigated else '⚠️ 未切换 URL（目标站点网络可达性问题）'}")
+    # 产品逻辑判定：点击命中 + 请求发出并被接受
+    return [("R1b github 外链（点击命中）", clicked),
+            ("R1b github 外链（请求发出并被接受）", accepted),
+            ("R1b github 外链（URL 实际切换）", navigated)]
 
 
 def case_R3(win, core):
@@ -343,6 +412,7 @@ def case_R6(win, core):
 
 CASES = {
     "R1": case_R1,
+    "R1b": case_R1b,
     "R2": case_R2,
     "R3": case_R3,
     "R4": case_R4,
