@@ -249,16 +249,23 @@ info = req("GET", f"{api}/repos/{repo}")
 print(f"仓库: {info.get('full_name')}  可见性: {info.get('visibility')}")
 
 # tag（不存在则创建）
+#
+# 字段说明（依据官方文档 REST /git/refs）：
+#   POST /repos/{owner}/{repo}/git/refs 的 body 必需字段是
+#     ref —— 完整引用名，必须是 refs/tags/<tag> 形式（至少两个斜杠）
+#     sha —— 指向的 commit SHA-1
+#   没有 "object" 字段（那是**响应体**里的结构，请求体用错会得到
+#   HTTP 422: "ref", "sha" weren't supplied）。
+#   查询单个 ref 用 GET /git/ref/tags/<tag>（注意末尾是 tag 名，不是空）。
 try:
     req("GET", f"{api}/repos/{repo}/git/ref/tags/{tag}")
     print(f"tag {tag} 已存在")
 except urllib.error.HTTPError:
     sha = req("GET", f"{api}/repos/{repo}/commits/main")["sha"]
-    body = json.dumps({"tag": tag, "message": f"release {tag}",
-                       "object": sha, "type": "commit"}).encode()
+    body = json.dumps({"ref": f"refs/tags/{tag}", "sha": sha}).encode()
     req("POST", f"{api}/repos/{repo}/git/refs", data=body,
         headers={"Content-Type": "application/json"})
-    print(f"已创建 tag {tag}")
+    print(f"已创建 tag {tag}（refs/tags/{tag} → {sha[:8]}）")
 
 # Release
 try:
